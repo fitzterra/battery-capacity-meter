@@ -1,0 +1,5 @@
+*.mpy
+*.pyc
+.direnv
+*.bin
+firmware/
