@@ -1,0 +1,15 @@
+[submodule "Firmware/submodules/micropython-ads1x15"]
+	path = Firmware/submodules/micropython-ads1x15
+	url = git@gitlab.gaul.za:tomc/micropython-ads1x15.git
+[submodule "Firmware/submodules/ssd1306_mp"]
+	path = Firmware/submodules/ssd1306_mp
+	url = https://github.com/Kongduino/ssd1306_mp.git
+[submodule "Firmware/submodules/micropython-tools"]
+	path = Firmware/submodules/micropython-tools
+	url = git@gitlab.gaul.za:gaulnet/micropython-tools.git
+[submodule "Firmware/submodules/uencoder"]
+	path = Firmware/submodules/uencoder
+	url = https://gitlab.com/WiLED-Project/uencoder.git
+[submodule "Firmware/submodules/ubutton"]
+	path = Firmware/submodules/ubutton
+	url = https://gitlab.com/WiLED-Project/ubutton.git
