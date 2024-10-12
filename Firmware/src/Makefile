@@ -97,10 +97,11 @@ MPY_SRC = boot.py \
 		  lib/led.py \
 		  demo_led.py \
 		  demo_ssd1306.py \
+		  demo_adc_tracker.py \
 		  lib/ssd1306.py \
-		  #lib/ads1x15.py \
-		  #lib/adc_tracker.py \
-		  #lib/utils.py \
+		  lib/ads1x15.py \
+		  lib/adc_tracker.py \
+		  lib/utils.py \
 		  #metric_tracker.py \
 		  #mqtt.py \
 		  #version.py \
