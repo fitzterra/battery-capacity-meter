@@ -51,25 +51,25 @@ I2C_FREQ = 4000000
 # Battery 0 control pins
 B0_CH_CTL = const(16)
 """Battery 0 charge control pin"""
-B0_DCH_CTRL = const(18)
+B0_DCH_CTL = const(18)
 """Battery 0 discharge control pin"""
 
 # Battery 1 control pins
 B1_CH_CTL = const(33)
 """Battery 1 charge control pin"""
-B1_DCH_CTRL = const(35)
+B1_DCH_CTL = const(35)
 """Battery 1 discharge control pin"""
 
 # Battery 2 control pins
 B2_CH_CTL = const(37)
 """Battery 2 charge control pin"""
-B2_DCH_CTRL = const(39)
+B2_DCH_CTL = const(39)
 """Battery 2 discharge control pin"""
 
 # Battery 3 control pins
 B3_CH_CTL = const(40)
 """Battery 3 charge control pin"""
-B3_DCH_CTRL = const(38)
+B3_DCH_CTL = const(38)
 """Battery 3 discharge control pin"""
 
 ### ADC inputs per battery controller.
@@ -108,12 +108,10 @@ B0_OB_V = "0x48:1"  # Output and battery voltage monitor
 B1_CH_C = "0x49:2:1:c"  # TP4056 charge current monitor - see above
 B1_DCH_C = f"0x48:3:{LOAD_R}:c"  # Discharge  monitor
 B1_OB_V = "0x49:3"  # Output and battery voltage monitor
-
 # Battery 2
 B2_CH_C = "0x4A:0:1:c"  # TP4056 charge current monitor - see above
 B2_DCH_C = f"0x49:1:{LOAD_R}:c"  # Discharge  monitor
 B2_OB_V = "0x49:0"  # Output and battery voltage monitor
-
 # Battery 3
 B3_CH_C = "0x4A:3:1:c"  # TP4056 charge current monitor - see above
 B3_DCH_C = f"0x4A:1:{LOAD_R}:c"  # Discharge  monitor

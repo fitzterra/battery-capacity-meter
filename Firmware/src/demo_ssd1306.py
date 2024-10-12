@@ -137,30 +137,3 @@ async def demoOLED(i2c):
             await asyncio.sleep(0.5)
             clr = 1 - clr
             rd -= 3
-
-        # clr = 1
-        # maxrd = 9
-        # rd = maxrd
-        # space = 2
-        # oled.fill(0)
-        # oled.show()
-
-        # def drc(timer):
-        #    global clr, rd, maxrd, oled, space
-        #    oled.fillCircle(15, 32, rd, clr)
-        #    if clr == 1:
-        #        oled.drawCircle(15, 32, rd + space, clr)
-        #    clr = 1 - clr
-        #    if clr == 1:
-        #        rd -= space
-        #        if rd < 3:
-        #            rd = maxrd
-        #    oled.show()
-
-        # timer = Timer(period=500, mode=Timer.PERIODIC, callback=drc)
-        # rd0 = 24
-        # for i in range(0, 5):
-        #    oled.drawOval(64, 38, rd0, rd0 - 4, 1)
-        #    rd0 -= 4
-        #    oled.show()
-        #    await asyncio.sleep(0.75)
