@@ -93,6 +93,7 @@ flash_bin: $(MPBIN)
 MPY_SRC = boot.py \
 		  main.py \
 		  config.py \
+		  structures.py \
 		  lib/ulogging.py \
 		  lib/led.py \
 		  demo_led.py \
@@ -100,7 +101,7 @@ MPY_SRC = boot.py \
 		  demo_adc_tracker.py \
 		  lib/ssd1306.py \
 		  lib/ads1x15.py \
-		  lib/adc_tracker.py \
+		  lib/charge_controller.py \
 		  lib/utils.py \
 		  #metric_tracker.py \
 		  #mqtt.py \
@@ -294,4 +295,4 @@ build_micropython:
 # been installed, and also a fully configured pydoctor.ini or similar config
 # file for pydoctor
 docs:
-	pydoctor -v
+	pydoctor
