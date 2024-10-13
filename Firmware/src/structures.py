@@ -58,6 +58,12 @@ class VoltageMonitor:
         """
         self._v = val
 
+    def reset(self):
+        """
+        Resets the monitor to zero
+        """
+        self.v = 0
+
     def __str__(self):
         """
         Show the value including it's units as a string.

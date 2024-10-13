@@ -20,7 +20,9 @@ Required external libs:
 """
 
 from collections import OrderedDict
+import uasyncio as asyncio
 from lib import ulogging as logger
+from lib.ads1x15 import ADS1115
 from config import BatteryControllerCFG, B0, B1, B2, B3
 
 ADC_ADDRS = [
@@ -150,17 +152,45 @@ class ChargeControl:
     .. _Coulomb: https://en.wikipedia.org/wiki/Coulomb
     """
 
-    def __init__(self, i2c: object):
+    # This is the gain to set for the builtin PGA. We will be measuring Lithium
+    # cells, so we can go up to 4.2V, which means we need to use the larges Full
+    # Scale Reading (FSR) which is ±6.144V or a granularity of 187.5µV per value.
+    # The ads1x15 lib uses a gain mapping where the first entry (0) is the one we
+    # need for the gain we require.
+    ADC_GAIN = 0
+    """Gain setting for small ADC values. See code for more details."""
+
+    # Set the sampling rate. This is an index into the rates map of the ads1x15
+    # module and sets the rate at which the ADS1115 will do the AD conversions. See
+    # the datasheet for more, but a rate of 0 uses the slowest, but more accurate,
+    # sampling rate of 8 samples per sec (over 500ms to sample all 4 channels),
+    # while the max rate of 7 samples at 860 samples per sec (±19ms to sample all
+    # four channels, but less accurate). The default rate of 4 does 128 samples per
+    # sec and takes about 50ms for a 4 channels.
+    ADC_RATE = 4
+    """Default ADC conversion rate index. See code for more info."""
+
+    def __init__(
+        self, i2c: object, sample_period: int = 300, start_tracker: bool = True
+    ):
         """
         Class initialisation.
 
         Args:
             i2c: An instance of an I2C object to communicate with the ADC
                 modules.
+            sample_period: The delay in milliseconds between sampling all
+                defined ADC monitor channels.
+            start_tracker: If True, `track()` will automatically be started as
+                an asyncio task and will start to run as soon as the asyncio
+                loop is started.
         """
         self._i2c = i2c
         self._adcs = []
         """List of addresses for for all found ADC modules on the I²C bus"""
+
+        self._sample_period = sample_period
+        """Set from `sample_period` in `__init__`."""
 
         self._bat_ctrl = OrderedDict()
         """Dictionary of available battery controllers."""
@@ -170,6 +200,14 @@ class ChargeControl:
         # Add the know controller configs by default
         for bat in [B0, B1, B2, B3]:
             self.addCtlConfig(bat)
+
+        # Do we start the tracker?
+        if start_tracker:
+            logger.info(
+                "%s: Will start tracker as soon as asyncIO loop starts.",
+                self.__class__.__name__,
+            )
+            asyncio.get_event_loop().create_task(self.track())
 
     def _findADCs(self) -> None:
         """
@@ -203,6 +241,9 @@ class ChargeControl:
         If controller name already exists in `_bat_ctrl`, an error will be
         logged and the config will not be added.
 
+        When adding a new battery controller, both charging and discharging
+        controls will be turned off, and all monitor values reset.
+
         Args:
             cfg: An instance created from a `BatteryControllerCFG`
         """
@@ -230,9 +271,105 @@ class ChargeControl:
             )
             return
 
-        self._bat_ctrl[cfg.name] = cfg
-
         logger.info("%s: Battery config for %s added", _me, cfg.name)
+
+        # Now reset everything
+        self._bat_ctrl[cfg.name] = cfg
+        self.charge(cfg.name, 0)
+        self.discharge(cfg.name, 0)
+        self.reset(cfg.name)
+
+    async def track(self):
+        """
+        Coro to continuously track ADC inputs.
+
+        This needs to be started as an asyncio task and it will a continuously
+        loop to do the following:
+
+        * For every available battery controller in `_bat_ctrl`:
+            * If currently charging, update the charge monitor with an ADC
+              reading for the given ADC module and channel
+            * If currently discharging, update the discharge monitor with an
+              ADC reading for the given ADC module and channel
+            * Update the battery/output monitor via it's designated ADC input
+        * Do an asyncio sleep for `_sample_period` milliseconds and repeat the
+          loop.
+        """
+        # If we have no channel definitions we exit
+        if not self._bat_ctrl:
+            logger.error(
+                "%s.track: No battery controller definitions found. Not starting tracker coro.",
+                self.__class__.__name__,
+            )
+            return
+
+        logger.info("%s.track: Starting tracker coro....", self.__class__.__name__)
+
+        # Instantiate an ADS1115 instance. We will be updating the address for
+        # each channel we read, so the address we use here does not matter too
+        # much.
+        adc = ADS1115(self._i2c, ADC_ADDRS[0], self.ADC_GAIN)
+
+        # Just keep tracking ....
+        while True:
+            # Sleep a bit
+            await asyncio.sleep_ms(self._sample_period)
+
+            # Cycle through all controllers
+            for ctl in self._bat_ctrl.values():
+
+                # If we are charging, we read the charge monitor
+                if ctl.pin_ch.value():
+                    # First set the address based on the channel def
+                    adc.address = ctl.ch_mon.adc.addr
+                    # Read the channel ADC value, converted as mV value
+                    ctl.ch_mon.mon.v = adc.raw_to_v(
+                        await adc.read_async(
+                            rate=self.ADC_RATE, channel1=ctl.ch_mon.adc.chan
+                        ),
+                        mV=True,
+                    )
+                    logger.debug(
+                        "%s.track: %s - update charge monitor: %s",
+                        self.__class__.__name__,
+                        ctl.name,
+                        ctl.ch_mon.mon,
+                    )
+
+                # If we are discharging, we read the discharge monitor
+                if ctl.pin_dch.value():
+                    # First set the address based on the channel def
+                    adc.address = ctl.dch_mon.adc.addr
+                    # Read the channel ADC value, converted as mV value
+                    ctl.dch_mon.mon.v = adc.raw_to_v(
+                        await adc.read_async(
+                            rate=self.ADC_RATE, channel1=ctl.dch_mon.adc.chan
+                        ),
+                        mV=True,
+                    )
+                    logger.debug(
+                        "%s.track: %s - update discharge monitor: %s",
+                        self.__class__.__name__,
+                        ctl.name,
+                        ctl.dch_mon.mon,
+                    )
+
+                # Always read the battery/output voltage. First set the address
+                # based on the channel def
+                adc.address = ctl.v_mon.adc.addr
+                # Read the channel ADC value, converted as mV value
+                ctl.v_mon.mon.v = adc.raw_to_v(
+                    await adc.read_async(
+                        rate=self.ADC_RATE, channel1=ctl.v_mon.adc.chan
+                    ),
+                    mV=True,
+                )
+                logger.debug(
+                    "%s.track: %s - update battery/output voltage monitor: %s",
+                    self.__class__.__name__,
+                    ctl.name,
+                    ctl.v_mon.mon,
+                )
 
     def ctlNames(self) -> list:
         """
@@ -245,7 +382,226 @@ class ChargeControl:
         Returns:
             List of controller names.
         """
-        return self._bat_ctrl.keys()
+        return list(self._bat_ctrl.keys())
+
+    def charge(self, bc_name: str, state: bool | None = None) -> bool:
+        """
+        Controls or returns the current charge state for the given battery
+        controller.
+
+        If any of the arguments are invalid, an error is logged and the request
+        is ignored.
+
+        Args:
+            bc_name: The Battery Controller name. This should be one of the
+                names as returned in the list from calling `ctlNames`
+            state: Controls either switching the controller on (True or 1), off
+                (False or 0), toggle current state ('t') or if None, just
+                returns the current state.
+
+        Returns;
+            1 if the controller state is currently charging, or 0 if not.
+        """
+        ctl = self._bat_ctrl.get(bc_name)
+        if ctl is None:
+            logger.error(
+                "%s.charge: Controller with name '%s' does not exist.",
+                self.__class__.__name__,
+                bc_name,
+            )
+            return None
+
+        if state == "t":
+            # Toggle current state
+            ctl.pin_ch.value(not ctl.pin_ch.value())
+            act = "toggled to"
+        elif state in (True, False):
+            ctl.pin_ch.value(state)
+            act = "set to"
+        elif state is None:
+            act = "reported as"
+        else:
+            logger.error(
+                "%s.charge: Invalid state argument: '%s'",
+                self.__class__.__name__,
+                state,
+            )
+            return None
+
+        state = ctl.pin_ch.value()
+
+        logger.info(
+            "%s.charge: Charge State for %s %s %s",
+            self.__class__.__name__,
+            bc_name,
+            act,
+            "On" if state else "Off",
+        )
+
+        return state
+
+    def discharge(self, bc_name: str, state: bool | None = None) -> bool:
+        """
+        Controls or returns the current discharge state for the given battery
+        controller.
+
+        If any of the arguments are invalid, an error is logged and the request
+        is ignored.
+
+        Args:
+            bc_name: The Battery Controller name. This should be one of the
+                names as returned in the list from calling `ctlNames`
+            state: Controls either switching the controller on (True or 1), off
+                (False or 0), toggle current state ('t') or if None, just
+                returns the current state.
+
+        Returns;
+            1 if the controller state is currently discharging, or 0 if not.
+        """
+        ctl = self._bat_ctrl.get(bc_name)
+        if ctl is None:
+            logger.error(
+                "%s.discharge: Controller with name '%s' does not exist.",
+                self.__class__.__name__,
+                bc_name,
+            )
+            return None
+
+        if state == "t":
+            # Toggle current state
+            ctl.pin_dch.value(not ctl.pin_dch.value())
+            act = "toggled to"
+        elif state in (True, False):
+            ctl.pin_dch.value(state)
+            act = "set to"
+        elif state is None:
+            act = "reported as"
+        else:
+            logger.error(
+                "%s.discharge: Invalid state argument: '%s'",
+                self.__class__.__name__,
+                state,
+            )
+            return None
+
+        state = ctl.pin_dch.value()
+
+        logger.info(
+            "%s.discharge: Discharge State for %s %s %s",
+            self.__class__.__name__,
+            bc_name,
+            act,
+            "On" if state else "Off",
+        )
+
+        return state
+
+    def state(self, bc_name: str) -> dict:
+        """
+        Returns the current state for a battery controller.
+
+        If any of the arguments are invalid, an error is logged and the request
+        is ignored.
+
+        Args:
+            bc_name: The Battery Controller name. This should be one of the
+                names as returned in the list from calling `ctlNames`
+
+        Returns;
+            If any args errors, an error is logged and None is returned, else a
+            dictionary as:
+
+            .. python::
+
+                {
+                    'ch_s': bool,  # True if currently charging, False otherwise
+                    'dch_s': bool, # True if currently discharging, False otherwise
+                    'bat': bool,   # True if not dis/charging and a battery is present
+                    'bat_v': float,# Battery or output voltage value in mV
+                    'ch': float    # Last charge value measured in mAh
+                    'ch_t': int    # Last charge period in seconds
+                    'dch': float   # Last discharge value measured in mAh
+                    'dch_t': int   # Last discharge period in seconds
+                }
+        """
+        ctl = self._bat_ctrl.get(bc_name)
+        if ctl is None:
+            logger.error(
+                "%s.state: Controller with name '%s' does not exist.",
+                self.__class__.__name__,
+                bc_name,
+            )
+            return None
+
+        logger.debug(
+            "%s.state: Getting state for %s ...", self.__class__.__name__, bc_name
+        )
+
+        ch_s = ctl.pin_ch.value()
+        dch_s = ctl.pin_dch.value()
+        bat_v = ctl.v_mon.mon.v
+        # Definition for battery present is if we are not charging or
+        # discharging, and the battery voltage read is greater than 2600mV
+        bat = bat_v > 2600 and not (ch_s or dch_s)
+
+        state = {
+            "ch_s": ch_s,
+            "dch_s": dch_s,
+            "bat_v": bat_v,
+            "bat": bat,
+            "ch": ctl.ch_mon.mon.mAh,
+            "ch_t": ctl.ch_mon.mon.tot_time,
+            "dch": ctl.ch_mon.mon.mAh,
+            "dch_t": ctl.ch_mon.mon.tot_time,
+        }
+
+        return state
+
+    def reset(self, bc_name: str, monitors: list | None = None) -> None:
+        """
+        Resets all or some specific monitors for a given charge controller.
+
+        If any of the arguments are invalid, an error is logged and the request
+        is ignored.
+
+        Args:
+            bc_name: The Battery Controller name. This should be one of the
+                names as returned in the list from calling `ctlNames`
+            monitors: A list of specific monitors to reset, or None to reset
+                all. Monitors are the various `ChannelMonitor` fields named
+                as `ch_mon`, `dch_mon` and `v_mon` in the
+                `BatteryControllerCFG` definition.
+        """
+        ctl = self._bat_ctrl.get(bc_name)
+        if ctl is None:
+            logger.error(
+                "%s.reset: Controller with name '%s' does not exist.",
+                self.__class__.__name__,
+                bc_name,
+            )
+            return
+
+        if not (isinstance(monitors, (list, tuple)) or monitors is None):
+            logger.error(
+                "%s.reset: Invalid value for monitors arg: %s",
+                self.__class__.__name__,
+                monitors,
+            )
+            return
+
+        logger.info(
+            "%s.reset: Resetting monitor(s) for %s...", self.__class__.__name__, bc_name
+        )
+
+        # Instead of validating each of the monitor field names in monitors, we
+        # will only reset anything that is valid in there, and ignore anything
+        # invalid. This should be slightly better on memory usage
+        for mon in ["ch_mon", "dch_mon", "v_mon"]:
+            if monitors is not None and mon not in monitors:
+                logger.info("   Ignoring %s ...", mon)
+                continue
+            getattr(ctl, mon).mon.reset()
+            logger.info("   Monitor %s has been reset..", mon)
 
 
 def _setupI2C():
@@ -258,3 +614,4 @@ def _setupI2C():
     i2c = I2C(scl=scl_pin, sda=sda_pin, freq=I2C_FREQ)
 
     return i2c
+
