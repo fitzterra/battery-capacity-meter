@@ -13,3 +13,6 @@
 [submodule "Firmware/submodules/ubutton"]
 	path = Firmware/submodules/ubutton
 	url = https://gitlab.com/WiLED-Project/ubutton.git
+[submodule "Firmware/submodules/micropython-stubs"]
+	path = Firmware/submodules/micropython-stubs
+	url = https://github.com/Josverl/micropython-stubs.git
