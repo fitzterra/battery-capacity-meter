@@ -602,16 +602,3 @@ class ChargeControl:
                 continue
             getattr(ctl, mon).mon.reset()
             logger.info("   Monitor %s has been reset..", mon)
-
-
-def _setupI2C():
-    # pylint: disable=import-outside-toplevel
-    from machine import Pin, SoftI2C as I2C
-    from config import PIN_SDA, PIN_SCL, I2C_INT_PULLUP, I2C_FREQ
-
-    scl_pin = Pin(PIN_SCL, pull=Pin.PULL_UP if I2C_INT_PULLUP else None)
-    sda_pin = Pin(PIN_SDA, pull=Pin.PULL_UP if I2C_INT_PULLUP else None)
-    i2c = I2C(scl=scl_pin, sda=sda_pin, freq=I2C_FREQ)
-
-    return i2c
-
