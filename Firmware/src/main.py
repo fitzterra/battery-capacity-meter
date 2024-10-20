@@ -2,20 +2,15 @@
 Main application entry point.
 """
 
-from machine import Pin, SoftI2C as I2C
 import uasyncio as asyncio
-from config import PIN_SDA, PIN_SCL, I2C_INT_PULLUP, I2C_FREQ
+from config import i2c
+from lib.charge_controller import ChargeControl
+from screens import uiSetup
 
-import demo_led  # pylint: disable=unused-import
-from demo_ssd1306 import demoOLED
-from demo_adc_tracker import demoBatMon
+# Set up the charge controller and screens
+ChCtl = ChargeControl(i2c)
+uiSetup(ChCtl.ctlNames())
 
-scl_pin = Pin(PIN_SCL, pull=Pin.PULL_UP if I2C_INT_PULLUP else None)
-sda_pin = Pin(PIN_SDA, pull=Pin.PULL_UP if I2C_INT_PULLUP else None)
-i2c = I2C(scl=scl_pin, sda=sda_pin, freq=I2C_FREQ)
-
-# Just running demos for now
+# get the asyncio loop and run forever
 loop = asyncio.get_event_loop()
-loop.create_task(demoOLED(i2c))
-demoBatMon(i2c)
 loop.run_forever()

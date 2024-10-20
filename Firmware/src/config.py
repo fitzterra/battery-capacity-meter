@@ -61,7 +61,7 @@ where:
 """
 
 from micropython import const
-from machine import Pin
+from machine import Pin, SoftI2C as I2C
 from structures import (
     ADCChannel,
     ChannelMonitor,
@@ -81,16 +81,32 @@ PIN_SCL = const(34)
 """I²C SCL pin used on S2 Mini for Host"""
 I2C_INT_PULLUP = True
 """Whether to use internal pullups for I²C or not. Default is enable pullups"""
-I2C_FREQ = 4000000
+I2C_FREQ = const(4000000)
 """Default I²C Frequency to run at."""
+# We also just create an I²C instance right here since it is needed all over
+# the place
+i2c = I2C(
+    scl=Pin(PIN_SCL, pull=Pin.PULL_UP if I2C_INT_PULLUP else None),
+    sda=Pin(PIN_SDA, pull=Pin.PULL_UP if I2C_INT_PULLUP else None),
+    freq=I2C_FREQ,
+)
+"""
+An I²C instance available for all, created from `PIN_SDA`, `PIN_SCL`,
+`I2C_INT_PULLUP` and `I2C_FREQ` configs.
+"""
 
 # OLED
 OLED_ADDR = 0x3C
 """I²C address for SSD1306 OLED"""
-OLED_W = 128
+OLED_W = const(128)
 """OLED width in pixels"""
-OLED_H = 64
+OLED_H = const(64)
 """OLED height in pixels"""
+
+# Encoder pins
+ENC_CLK = const(4)
+ENC_DT = const(2)
+ENC_SW = const(1)
 
 ### ADC inputs per battery controller.
 # These constants sets the ADCTracker tracer input config for the various

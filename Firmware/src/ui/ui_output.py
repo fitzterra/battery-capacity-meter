@@ -110,17 +110,17 @@ class Screen:
         self._event_in = None
 
         # Can be set by `focus()` as the screen to pass focus to when this
-        # screen exists. See `focus()` and `passFocus()`
+        # screen exists. See `focus()` and `_passFocus()`
         self._focus_on_exit = None
 
         # Will be used to save the _focus_on_exit screen (if set) and we call
-        # the `passFocus` method. The reason is that if we pass focus somewhere
+        # the `_passFocus` method. The reason is that if we pass focus somewhere
         # and we ask that Screen to pass focus back to us on exit, when that
         # screen passesfocus, it is probably going to set the `_focus_on_exit`
         # arg to our `focus` method to be None. In this case, the `focus`
         # method will then overwrite our caller's `_focus_on_exit` value, and
         # we loose the link back to our caller.
-        # The `passFocus` and `focus` methods will work together to then
+        # The `_passFocus` and `focus` methods will work together to then
         # restore our caller's screen reference if need be.
         self._save_focus_on_exit = None
 
@@ -287,7 +287,7 @@ class Screen:
         self, display: SSD1306_I2C, event: asyncio.Event, focus_on_exit: "Screen" = None
     ):
         """
-        Called when this instance gets focus.
+        Called to pass focus to this screen instance.
 
         Sets up the display and input event signal and then calls `setup()` to
         show the screen.
@@ -298,7 +298,7 @@ class Screen:
             focus_on_exit: The screen passing us the focus, may also set a
                 screen to pass focus to when this screen exits. This is
                 optional, but if passed and the `screen` arg when calling
-                `passFocus()` from this screen is None, then this screen will be
+                `_passFocus()` from this screen is None, then this screen will be
                 focused on.
         """
         self._has_focus = True
@@ -320,7 +320,7 @@ class Screen:
 
         self.setup()
 
-    def passFocus(self, screen: "Screen" | None, return_to_me: bool = False):
+    def _passFocus(self, screen: "Screen" | None, return_to_me: bool = False):
         """
         Passes focus on to another screen.
 
@@ -444,14 +444,14 @@ class Screen:
         us.
 
         If ._focus_on_exit` is not None, this method will call
-        .passFocus()` to return focust to the "on exit" Screen.
+        ._passFocus()` to return focus to the "on exit" Screen.
 
-        The derived class chould override this if needed.
+        The derived class could override this if needed.
         """
         logging.info("Screen %s received the SHORT PRESS action.", self.name)
         if self._focus_on_exit is not None:
             logging.info("Screen %s auto returning focus on short click", self.name)
-            self.passFocus(None)
+            self._passFocus(None)
         else:
             logging.info("Screen %s ignoring the SHORT PRESS action.", self.name)
 

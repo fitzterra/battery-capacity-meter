@@ -94,20 +94,20 @@ MPY_SRC = boot.py \
 		  main.py \
 		  config.py \
 		  structures.py \
+		  ui/__init__.py \
+		  ui/ui_input.py \
+		  ui/ui_output.py \
 		  lib/ulogging.py \
-		  lib/led.py \
-		  demo_led.py \
-		  demo_ssd1306.py \
-		  demo_adc_tracker.py \
 		  lib/ssd1306.py \
 		  lib/ads1x15.py \
-		  lib/charge_controller.py \
 		  lib/utils.py \
-		  #metric_tracker.py \
+		  lib/uencoder.py \
+		  lib/ubutton.py \
+		  lib/charge_controller.py \
+		  screens.py \
+		  version.py \
 		  #mqtt.py \
-		  #version.py \
 		  #interface.py \
-		  #screens.py \
 
 # The expected .mpy files for each .py above
 MPYS = $(patsubst %.py,%.mpy,$(wildcard $(MPY_SRC)))
