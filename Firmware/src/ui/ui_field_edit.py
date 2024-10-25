@@ -14,9 +14,6 @@ C_HIDE = const(1)
 M_CURSOR = const(0)  # Cursor movement
 M_EDIT = const(1)  # Edit mode
 
-# Possible field types. These are limited ASCII lists of characters that are
-# allowed for fields of this type. These lists are not overly memory efficient
-# at the moment. In future a better way to manage this may be explored.
 F_TYPES = {
     "num": bytearray(rb"0123456789", "ascii"),
     "alpha": bytearray(rb"abcdefghijklmnopqrstuvwxyz -+_", "ascii"),
@@ -24,6 +21,9 @@ F_TYPES = {
     "alnum": bytearray(rb"abcdefghijklmnopqrstuvwxyz 0123456789-+_", "ascii"),
     "ALnum": bytearray(rb"ABCDEFGHIJKLMNOPQRSTUVWXYZ 0123456789-+_", "ascii"),
 }
+"""Possible field types. These are limited ASCII lists of characters that are
+allowed for fields of this type. These lists are not overly memory efficient at
+the moment. In future a better way to manage this may be explored."""
 
 
 class FieldEdit(Screen):

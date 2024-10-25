@@ -309,7 +309,7 @@ class Menu(Screen):
         if isinstance(act_item, Screen):
             # Pass focus to this screen, hinting that it could return to us on
             # exit.
-            self.passFocus(act_item, return_to_me=True)
+            self._passFocus(act_item, return_to_me=True)
             return
 
         if callable(act_item):
@@ -331,7 +331,7 @@ class Menu(Screen):
             # If res is True, and we can pass focus to a parent, we do so.
             if res is True and self._focus_on_exit:
                 logging.info("Passing focus to %s", self._focus_on_exit)
-                self.passFocus(None)
+                self._passFocus(None)
 
             return
 
@@ -350,7 +350,7 @@ class Menu(Screen):
             if self._focus_on_exit:
                 # Yes, so we are probably a menu called for another screen, so
                 # let's exit back to our caller
-                self.passFocus(None)
+                self._passFocus(None)
             else:
                 logging.error("Already at the top level menu.")
             return

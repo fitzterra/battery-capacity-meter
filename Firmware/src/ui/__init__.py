@@ -84,3 +84,8 @@ Menu actions are other `Screen` objects or submenu ...
 
 from .ui_input import input_evt, setupEncoder
 from .ui_output import Screen
+from .ui_menu import Menu
+from .ui_field_edit import (
+    F_TYPES,
+    FieldEdit,
+)

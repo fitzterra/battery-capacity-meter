@@ -97,6 +97,8 @@ MPY_SRC = boot.py \
 		  ui/__init__.py \
 		  ui/ui_input.py \
 		  ui/ui_output.py \
+		  ui/ui_menu.py \
+		  ui/ui_field_edit.py \
 		  lib/ulogging.py \
 		  lib/ssd1306.py \
 		  lib/ads1x15.py \
