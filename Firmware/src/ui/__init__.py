@@ -13,13 +13,13 @@ tested on this hardware:
 
 * ESP8266 and ESP32
 * SSD1306 128x64 OLED (I²C version) for the display output
-* KY-040 or clone type rotary encoder for user input
+* KY-040_ or clone type rotary encoder for user input
 
 The framework is fairly generic, so should be able to run on other
 environments, but may need some slight modifications.
 
 It is meant to be run in an asyncio_ application. Any application that calls
-the standard `sleep` function, or has long running functions or methods that is
+the standard ``sleep`` function, or has long running functions or methods that is
 not run asynchronously, will not allow user input to be detected as needed.
 
 Basic Concept
@@ -29,7 +29,7 @@ The basic concept is as follows:
 
 * Any number of `Screen` instances are created and can get focus.
 * On application startup, focus is given to the first `Screen` to show.
-* When a `Screen` instance gets focus, it has control of the `display` to
+* When a `Screen` instance gets focus, it has control of the *display* to
   show, draw, print, etc. user output, and will receive all user input from
   the input hardware (the Rotary encoder for now).
 * The `Screen` instance will now do whatever it needs to do with user input,
@@ -61,7 +61,6 @@ Usage
 ???? Understand the FrameBuffer ?????
 
 See `Screen` ....
-*
 
 
 Included Utilities
@@ -80,6 +79,7 @@ Menu actions are other `Screen` objects or submenu ...
 
 .. _Micropython: https://micropython.org
 .. _asyncio: https://github.com/peterhinch/micropython-async/blob/master/v3/README.md
+.. _KY-040: https://components101.com/modules/KY-04-rotary-encoder-pinout-features-datasheet-working-application-alternative
 """
 
 from .ui_input import input_evt, setupEncoder

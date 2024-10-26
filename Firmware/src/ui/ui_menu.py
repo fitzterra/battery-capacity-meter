@@ -112,11 +112,11 @@ class Menu(Screen):
         is the currently selected item.
 
         Each line is FONT_H pixels with line 0 at the top of the display.
-        The last line is `self._max_rows-1`
+        The last line is ``self._max_rows-1``
 
         The text is printed starting from the leftmost pixel on the display.
 
-        If `txt` has more characters than `self._max_cols`, it is clipped to
+        If ``txt`` has more characters than `_max_cols`, it is clipped to
         fit on the display.
 
         NOTE!: The inverting mechanism is very simple an relies on the fact

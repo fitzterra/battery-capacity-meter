@@ -48,7 +48,8 @@ class FieldEdit(Screen):
 
     The default value will also be show in this field.
 
-    Two *buttons*, `OK` and `Cancel` will be show at the bottom of the screen.
+    Two *buttons*, ``OK`` and ``Cancel`` will be show at the bottom of the
+    screen.
 
     A cursor is shown as lines above and below the current character than is
     selected. Rotating the encoder moves the cursor left and right. Moving past
@@ -69,8 +70,8 @@ class FieldEdit(Screen):
         def callback(value, field_id)
 
     NOTES:
-        * The `value` field will a bytearray type.
-        * The field_id is the same optional id passed in on init.
+        * The ``value`` field will a ``bytearray`` type.
+        * The ``field_id`` is the same optional id passed in on `__init__`.
 
     The Cancel button will just exit by passing focus. A long press is also a
     Cancel operation.
@@ -150,7 +151,7 @@ class FieldEdit(Screen):
 
         The cursor is shown as a line above and below the character or button.
 
-        The `self._cursor` value indicates where the cursor is currently:
+        The `_cursor` value indicates where the cursor is currently:
         * positive it in the field at the position indicated
         * -1 is on the Cancel button
         * -2 is on the OK button
@@ -181,7 +182,7 @@ class FieldEdit(Screen):
         The step value indicated the direction to move and also the magnitude,
         although the magnitude should probably never be more than 1.
 
-        This will remove the current cursor, update `self._cursor` and then
+        This will remove the current cursor, update `_cursor` and then
         show the new poition.
 
         Args:
