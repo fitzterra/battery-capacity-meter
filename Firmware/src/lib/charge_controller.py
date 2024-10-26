@@ -20,6 +20,7 @@ Required external libs:
 """
 
 from collections import OrderedDict
+from micropython import const
 import uasyncio as asyncio
 from lib import ulogging as logger
 from lib.ads1x15 import ADS1115
@@ -120,7 +121,7 @@ class ChargeControl:
 
     * Take more than one current measurement per second, thus increasing the
       accuracy of current flow per period. **NOTE**: This is currently set by
-      the default `sample_period` for all measurements for all channels and
+      the default `_sample_period` for all measurements for all channels and
       can not be set per channel (yet?).
     * Keep track of the time between measurements, thus not having to rely on
       a dead-accurate-per-period measurement time.
@@ -147,6 +148,29 @@ class ChargeControl:
     The `reset` method should be used to reset the value to start a new
     charge monitor session.
 
+    Truth Table
+    ^^^^^^^^^^^
+    +--------+---------+-------+--------+---------+-------------+----------------+
+    | ch_ctl | dch_ctl | v_mon | ch_mon | dch_mon | bat_present | state          |
+    +========+=========+=======+========+=========+=============+================+
+    |   0    |    0    | <100mV|   X    |    X    |    no       | NO_BAT         |
+    +--------+---------+-------+--------+---------+-------------+----------------+
+    |   0    |    0    |>2000mV|   X    |    X    |    yes      | BAT_INS        |
+    +--------+---------+-------+--------+---------+-------------+----------------+
+    |   0    |    1    | <100mV|   X    |   0mA   |    no       | BAT_YANKED     |
+    +--------+---------+-------+--------+---------+-------------+----------------+
+    |   0    |    1    |>2000mV|   X    | >100mA  |    yes      | DISCHARGING    |
+    +--------+---------+-------+--------+---------+-------------+----------------+
+    |   1    |    0    | >4.0V | <10mA  |    X    | no/charged  | CHARGED/YANKED |
+    +--------+---------+-------+--------+---------+-------------+----------------+
+    |   1    |    0    | <4.2V | >10mA  |    X    | yes/charging| CHARGING       |
+    +--------+---------+-------+--------+---------+-------------+----------------+
+    |   1    |    1    | <3.0V | >400mA |  >300mA | no/dis input| INVALID        |
+    +--------+---------+-------+--------+---------+-------------+----------------+
+    |   1    |    1    | >3.0V | >600mA |  >600mA | yes/ch+dch  | INVALID        |
+    +--------+---------+-------+--------+---------+-------------+----------------+
+
+
     .. _ADS1115: https://components101.com/modules/ads1115-module-with-programmable-gain-amplifier
     .. _datasheet: https://www.ti.com/lit/gpn/ads1115
     .. _Coulomb: https://en.wikipedia.org/wiki/Coulomb
@@ -170,6 +194,21 @@ class ChargeControl:
     ADC_RATE = 4
     """Default ADC conversion rate index. See code for more info."""
 
+    # Different possible states
+    ST_NOBAT = const(0)
+    """No Battery: Not charging or discharging and Voltage monitor is at 0V"""
+    ST_BATINS = const(1)
+    """Battery Installed: Not charging or discharging and voltage monitor > 2.6V"""
+    ST_CHARGING = const(2)
+    """Charging: Battery is being charged. Charge is on and current flowing."""
+    ST_DISCHARGING = const(3)
+    """Discharging: Battery is being discharged. Discharge is on and current flow."""
+    ST_CHARGED = const(4)
+    """Charging is complete. Charge is on, bat at full voltage and no current flow."""
+    ST_DISCHARGED = const(5)
+    """Discharging is complete. Voltage dropped to min and current stopped when
+    protection kicked in."""
+
     def __init__(
         self, i2c: object, sample_period: int = 300, start_tracker: bool = True
     ):
@@ -190,7 +229,7 @@ class ChargeControl:
         """List of addresses for for all found ADC modules on the I²C bus"""
 
         self._sample_period = sample_period
-        """Set from `sample_period` in `__init__`."""
+        """Set from ``sample_period`` arg to `__init__`."""
 
         self._bat_ctrl = OrderedDict()
         """Dictionary of available battery controllers."""
@@ -234,9 +273,9 @@ class ChargeControl:
         """
         Adds a battery controller config to the controller.
 
-        If the I²C addresses for any of the `cfg.ch_mon` definitions have not been
-        detected on the I²C bus, and error will be logged, and this config will
-        not be added.
+        If the I²C addresses for any of the ``cfg.ch_mon`` definitions have not
+        been detected on the I²C bus, and error will be logged, and this config
+        will not be added.
 
         If controller name already exists in `_bat_ctrl`, an error will be
         logged and the config will not be added.
@@ -376,7 +415,7 @@ class ChargeControl:
         Returns a list of available controllers as was added via
         `addCtlConfig`.
 
-        The list will contain the `name` attributes from the
+        The list will contain the ``name`` attributes from the
         `BatteryControllerCFG` structures that we can control.
 
         Returns:
@@ -520,10 +559,13 @@ class ChargeControl:
                     'bat_v': float,# Battery or output voltage value in mV
                     'ch': float    # Last charge value measured in mAh
                     'ch_t': int    # Last charge period in seconds
+                    'ch_c': int    # Last charge current in mA
                     'dch': float   # Last discharge value measured in mAh
                     'dch_t': int   # Last discharge period in seconds
+                    'dch_c': int   # Last discharge current in mA
                 }
         """
+        # Get the correct battery controller by it's name
         ctl = self._bat_ctrl.get(bc_name)
         if ctl is None:
             logger.error(
@@ -537,6 +579,8 @@ class ChargeControl:
             "%s.state: Getting state for %s ...", self.__class__.__name__, bc_name
         )
 
+        # Get the current charge and discharge controller states, and the
+        # battery/output voltage
         ch_s = ctl.pin_ch.value()
         dch_s = ctl.pin_dch.value()
         bat_v = ctl.v_mon.mon.v
@@ -551,8 +595,10 @@ class ChargeControl:
             "bat": bat,
             "ch": ctl.ch_mon.mon.mAh,
             "ch_t": ctl.ch_mon.mon.tot_time,
-            "dch": ctl.ch_mon.mon.mAh,
-            "dch_t": ctl.ch_mon.mon.tot_time,
+            "ch_c": ctl.ch_mon.mon.c,
+            "dch": ctl.dch_mon.mon.mAh,
+            "dch_t": ctl.dch_mon.mon.tot_time,
+            "dch_c": ctl.dch_mon.mon.c,
         }
 
         return state
@@ -569,7 +615,7 @@ class ChargeControl:
                 names as returned in the list from calling `ctlNames`
             monitors: A list of specific monitors to reset, or None to reset
                 all. Monitors are the various `ChannelMonitor` fields named
-                as `ch_mon`, `dch_mon` and `v_mon` in the
+                as ``ch_mon``, ``dch_mon`` and ``v_mon`` in the
                 `BatteryControllerCFG` definition.
         """
         ctl = self._bat_ctrl.get(bc_name)

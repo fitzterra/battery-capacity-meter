@@ -35,7 +35,7 @@ class Screen:
         * NOTE: When this instance does NOT have focus, ._display` will be
           None, so if any weird errors happen, make sure this is not the
           reason.
-    * The four `act???()` methods, or only those that will be needed.
+    * The four ``act???()`` methods, or only those that will be needed.
         * These method are called asynchronously when user input is detected.
         * The current input types and methods called for these are:
             * `actCW()` : Rotary encoder turned one step clockwise
@@ -90,7 +90,7 @@ class Screen:
 
         Args:
             name: A name for the screen. This can be used in the `setup` or
-                `display` methods, or in log messages to identify which screen
+                `update` methods, or in log messages to identify which screen
                 is doing what.
             px_w: The screen width in pixels
             px_h: Screen height in pixels
@@ -112,6 +112,9 @@ class Screen:
         # Can be set by `focus()` as the screen to pass focus to when this
         # screen exists. See `focus()` and `_passFocus()`
         self._focus_on_exit = None
+        """Optional `Screen` instance to receive focus when this screen exists.
+        Set via `focus()` and used in `_passFocus()` when exiting this
+        screen."""
 
         # Will be used to save the _focus_on_exit screen (if set) and we call
         # the `_passFocus` method. The reason is that if we pass focus somewhere
@@ -185,10 +188,10 @@ class Screen:
         This will start as a task whenever we get input focus, and will exit
         when we loose focus.
 
-        If we do not have the focus, ._event_in` will be None and we just
-        loop waiting for it to be set to an Event sync primitive by an external
-        call to .focus()`. While `self._event_in` then is an event
-        primitive, we monitor it for input events.
+        If we do not have the focus, `_event_in` will be None and we just loop
+        waiting for it to be set to an Event sync primitive by an external call
+        to .focus()`. While `_event_in` then is an event primitive, we monitor
+        it for input events.
 
         Once we receive any event, we determine the event type and call one of
         the action methods to handle the input. This continues until we loose
@@ -297,7 +300,7 @@ class Screen:
             event: The Input event synchronisation primitive
             focus_on_exit: The screen passing us the focus, may also set a
                 screen to pass focus to when this screen exits. This is
-                optional, but if passed and the `screen` arg when calling
+                optional, but if passed and the ``screen`` arg when calling
                 `_passFocus()` from this screen is None, then this screen will be
                 focused on.
         """
@@ -311,7 +314,7 @@ class Screen:
 
         # If we did not get a screen to pass focus to when we exit, but we have
         # a saved our callers screen ref if we perhaps passed focus to a sub
-        # screen before, we then restore ._focus_on_exit` to our caller's
+        # screen before, we then restore `_focus_on_exit` to our caller's
         # reference so we do not loose that reference.
         if self._focus_on_exit is None and self._save_focus_on_exit is not None:
             self._focus_on_exit = self._save_focus_on_exit
@@ -334,17 +337,17 @@ class Screen:
         may have "suggested" which Screen instance, it thinks, should receive
         focus when this instance exits or needs to pass focus back/forward.
         This "suggested" Screen instance would then be available in
-        ._focus_on_exit`. These "suggestions" makes it easy to dynamically
+        `_focus_on_exit`. These "suggestions" makes it easy to dynamically
         chain a hierarchical screen flow together.
         It is called a "suggestion" since it is up to the current screen to
         decide if it will use this suggestion, or pass focus to some other
         screen it would rather use, like a child of it's own, perhaps.
 
         Regardless, in order to pass focus to this "suggested" screen, you can
-        either pass ._focus_on_exit` as the `screen` arg (if it is not
-        None), or else just pass None for `screen`.
-        If the `screen` arg is None, we will assume that the
-        ._focus_on_exit` attribute contains a valid screen, and use that
+        either pass `_focus_on_exit` as the ``screen`` arg (if it is not
+        None), or else just pass None for ``screen``.
+        If the ``screen`` arg is None, we will assume that the
+        `_focus_on_exit` attribute contains a valid screen, and use that
         as the screen to pass focus to here.
 
         If the assumption is wrong and the screen to receive focus turns out to
@@ -352,11 +355,11 @@ class Screen:
 
         Args:
             screen: Screen instance to pass focus to, or None to use
-                ._focus_on_exit` as the screen to pass focus to. See above.
+                `_focus_on_exit` as the screen to pass focus to. See above.
             return_to_me: If True, we will "suggest" to the screen we are
                 passing focus to, to return focus back to us when it exists.
-                All this does is pass ` to the `focus()` call we are
-                making to `screen`.
+                All this does is pass ``self`` to the `focus()` call we are
+                making to ``screen``.
         """
         # Always preserver our callers screen reference, just in case we get
         # focus back to us from a sub screen, and we need to later pass focus
@@ -395,7 +398,7 @@ class Screen:
 
         If the refresh functionality is needed, best would be that your derived
         class still overrides this setup method, and then AT THE END of your
-        setup, call this setup via `super().setup()`.
+        setup, call this setup via ``super().setup()``.
 
         Also note that you have to set `AUTO_REFRESH` to a positive refresh rate
         for this to work.
@@ -443,8 +446,8 @@ class Screen:
         received a screen to return focus to on exit in the `focus()` call to
         us.
 
-        If ._focus_on_exit` is not None, this method will call
-        ._passFocus()` to return focus to the "on exit" Screen.
+        If `_focus_on_exit` is not None, this method will call
+        `_passFocus()` to return focus to the "on exit" `Screen`.
 
         The derived class could override this if needed.
         """

@@ -24,8 +24,8 @@ divisor, leaving the charge current (``Ich``) equal to the voltage measured on
 the pin (``Vprog``).
 
 To use the ``PROG`` pin of the TP4056 as charge monitor input for the
-`ADCTracker` module, we can effectively say the "current sensing" resistor is
-1Ω.
+`ChargeControl` module, we can effectively say the "current sensing" resistor
+is 1Ω.
 
 For the discharge monitor, we define the ``LOAD`` resistor (`LOAD_R`) in this
 config file.  This will make it more difficult to change this at runtime, but

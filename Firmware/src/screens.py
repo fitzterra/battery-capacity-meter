@@ -46,9 +46,8 @@ class Boot(Screen):
         """
         Overrides init to accept the number of battery controllers available.
 
-        See `Screen.__init__` for `name`, `px_w` and `px_h` arguments.
-
         Args:
+            name, px_w, px_h: See `Screen.__init__`
             ctls: The number of battery controllers detected by the
                 `ChargeControl` instance.
         """
@@ -178,7 +177,7 @@ def uiSetup(bat_ctrls: list) -> list:
     """
     Sets up the UI.
 
-    This function will set the rotary encoder up from the `ENC_??` constants
+    This function will set the rotary encoder up from the ``ENC_??`` constants
     from `config`.
 
     It also sets the screens up and pass them back to the caller.

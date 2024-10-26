@@ -348,12 +348,12 @@ ChannelMonitor = namedtuple(
     ),
 )
 """
-    Channel monitor `namedtuple`.
+    Channel monitor ``namedtuple``.
 
     * Name: **ChannelMonitor**
     * Fields:
-        * `adc`: Expects an `ADCChannel` instance
-        * `mon`: Expects one of `VoltageMonitor`, `CurrentMonitor` or `ChargeMonitor`
+        * ``adc``: Expects an `ADCChannel` instance
+        * ``mon``: Expects one of `VoltageMonitor`, `CurrentMonitor` or `ChargeMonitor`
 
     Example:
 
@@ -381,16 +381,16 @@ BatteryControllerCFG = namedtuple(
     ),
 )
 """
-    Battery Controller Config `namedtuple`
+    Battery Controller Config ``namedtuple``
 
     * Name: **BatControlCFG**
     * Fields:
-        * `name`: A name to uniquely identify this controller
-        * `pin_ch`: Expects a `Pin` instance for charging control on and off
-        * `pin_dch`: Expects a `Pin` instance for discharging control on and off
-        * `ch_mon`: Expects a `ChannelMonitor` instance for charge monitoring
-        * `dch_mon`: Expects a `ChannelMonitor` instance for discharge monitoring
-        * `v_mon`: Expects a `ChannelMonitor` instance for battery voltage monitoring
+        * ``name``: A name to uniquely identify this controller
+        * ``pin_ch``: Expects a ``Pin`` instance for charging control on and off
+        * ``pin_dch``: Expects a ``Pin`` instance for discharging control on and off
+        * ``ch_mon``: Expects a `ChannelMonitor` instance for charge monitoring
+        * ``dch_mon``: Expects a `ChannelMonitor` instance for discharge monitoring
+        * ``v_mon``: Expects a `ChannelMonitor` instance for battery voltage monitoring
 
     Example:
 
