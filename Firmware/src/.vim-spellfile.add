@@ -78,3 +78,12 @@ VCC
 pinout
 setupEncoder
 micropython
+framebuffer
+framebuf
+hardcode
+FrameBuffer
+BatteryController
+bci
+px
+BCMView
+dch
