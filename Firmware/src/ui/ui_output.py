@@ -72,17 +72,28 @@ class Screen:
     pass focus back to this child's parent. All this without having to hardcode
     hierarchies in Screen instances.
 
+    Attributes:
+        name: Set from the ``name`` arg by `__init__`
+        px_w: Set from the ``px_w`` arg by `__init__`
+        px_h: Set from the ``px_h`` arg by `__init__`
+        AUTO_REFRESH: Can be overridden by a derived class to get auto screen
+            refresh functionality that calls the `update()` method every this
+            many milliseconds.  See the `_refresh()` and `setup()` methods for
+            more info.
+        FONT_H: Default font heigh for the default framebuffer font
+        FONT_W: Default font width for the default framebuffer font
+
     .. _FrameBuffer: https://docs.micropython.org/en/latest/library/framebuf.html
     """
 
-    # This is the default font width and height for the standard framebuffer.
+    # We are happy with the number of these @pylint:disable=too-many-instance-attributes
+
+    # See class docstring Attributes definition for more info
     FONT_H = 8
     FONT_W = 8
 
+    # See class docstring Attributes definition for more info
     AUTO_REFRESH = 0
-    """Can be overridden by a derived class to get auto screen refresh
-    functionality that calls the `update()` method every this many
-    milliseconds.  See the `_refresh()` and `setup()` methods for more info."""
 
     def __init__(self, name: str, px_w: int, px_h: int):
         """
@@ -126,6 +137,15 @@ class Screen:
         # The `_passFocus` and `focus` methods will work together to then
         # restore our caller's screen reference if need be.
         self._save_focus_on_exit = None
+
+    def __str__(self):
+        """
+        Human readable representation of the screen.
+
+        Returns:
+            The screen `name` only.
+        """
+        return self.name
 
     def _show(self):
         """
