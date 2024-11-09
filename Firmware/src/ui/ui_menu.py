@@ -90,12 +90,6 @@ class Menu(Screen):
             append the current menu and selected item as a tuple to this list,
             and every time we leave a sub-menu, we will pop the current menu
             details off this list.
-        _max_cols: The max number of columns in character widths that will fit
-            on the screen. Based on the display width (``px_w``) and the font
-            width (``FONT_W``)
-        _max_rows: The max number of rows in character heights that will fit on
-            the screen. Based on the display height (``px_h``) and the font
-            height (``FONT_H``)
         _top_row: Used to indicate the top character row number where the top
             of the menu will be displayed. This allows for any number of rows
             to be left open above the menu. The ``title`` argument to
@@ -140,8 +134,6 @@ class Menu(Screen):
         self._curr: tuple = self._menu_def
         self._selected: int = 0
         self._parents = []
-        self._max_cols: int = px_w // self.FONT_W
-        self._max_rows: int = px_h // self.FONT_H
         self._top_row: int = 0 if not title else 1
         self._viewport_y: int = 0
         self._title = title
@@ -194,68 +186,6 @@ class Menu(Screen):
 
         # We need to invert.
         self._invertText(0, y, len(txt))
-
-    def _invertText(self, x: int, y: int, w: int = 0):
-        """
-        Inverts the text that is displayed at column ``x``, row ``y``, for
-        ``w`` columns.
-
-        Note:
-          These are not pixel coordinates, but character display coordinates,
-          with the assumption that text coordinates (0,0) corresponds to pixel
-          coordinate (0,0). IOW, text rows and columns will always be multiples
-          of `FONT_W` and `FONT_H`.
-          Currently only the characters in one row can be inverted.
-
-        Args:
-            x: Column in character coordinate units of first character to
-                invert.
-            y: Row in character coordinate units of first character to invert.
-            w: How many characters to invert. With the default of 0, all
-                characters to the end of the line will be inverted.
-        """
-        # We invert. by XORing the bytes that make up this text with 0xFF to
-        # invert the bits.
-        # The bytes buffer representing the display bits are arranged such that
-        # that each byte in order represents 8 vertical bits consequentially.
-        #
-        # Here is an example trying to show how this looks:
-        #
-        #  | byte1 | byte2 | byte3 | byte4
-        #  abcdefghABCDEFGHabcdefghABCDEFGH
-        #
-        #  1234  <-- byte number ^
-        #  aAaA \
-        #  bBbB  \
-        #  cCcC   \
-        #  dDdD   | First 4 pixel rows on display
-        #  eEeE   |
-        #  fFfF   /
-        #  gGgG  /
-        #  hHhH /
-        #
-        # NOTE: This is very specific to the SSD1306 I²C OLED display, and only
-        # works so simply because the font height is the same the number of
-        # bits in a byte!
-
-        # Each text line takes up `self._max_cols` characters, with each pixel
-        # line in a character taking up one byte, giving 8 bytes per character.
-        # NOTE: We use `FONT_W` here only to be pedantic and not hardcode an 8
-        #   eight. If the font width is not 8 pixels, this will probably not
-        #   work.
-        offs = self._max_cols * self.FONT_W * y + x * self.FONT_W
-
-        # If w is 0, calculate the number of characters left up to the end of
-        # the line.
-        if w == 0:
-            w = self._max_cols - x
-
-        # NOTE: Same remark for `FONT_W` here as above.
-        end = offs + w * self.FONT_W
-
-        for i in range(offs, end):
-            # By XORing with 0xFF we invert each bit
-            self._display.buffer[i] ^= 0xFF
 
     def _isSubMenu(self, item) -> bool:
         """
