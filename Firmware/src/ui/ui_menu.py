@@ -111,7 +111,7 @@ class Menu(Screen):
         Prints a menu item at line y, optionally inverted to indicate the item
         is the currently selected item.
 
-        Each line is FONT_H pixels with line 0 at the top of the display.
+        Each line is FONT_H pixels high with line 0 at the top of the display.
         The last line is ``self._max_rows-1``
 
         The text is printed starting from the leftmost pixel on the display.
@@ -238,8 +238,30 @@ class Menu(Screen):
             self._curr[self._viewport_y : self._viewport_y + self._max_rows]
         ):
             # Each item is a 2-tuple where the first element is the menu text
-            # to show. Display that, and invert the currently selected line.
-            self._menuLine(item[0], i, i == vp_sel, self._isSubMenu(item[1]))
+            # to show.
+            # To allow for dynamically updating this menu entry, we allow for
+            # the Screen linked to the menu entry, the second element in the
+            # tuple, to have a method called `menuText` which we can call to
+            # return the dynamic menu entry.
+            # The second element in the tuple may also be a submenu, and for
+            # these we do not allow dynamic menu entry updates (yet).
+            menu_txt = None
+            if isinstance(item[1], Screen) and hasattr(item[1], "menuText"):
+                try:
+                    menu_txt = item[1].menuText()
+                except Exception as exc:
+                    logging.error(
+                        "Error getting dynamic menu text from Screen %s. "
+                        "Falling back to fixed entry '%s'. Error: %s",
+                        item[1],
+                        item[0],
+                        exc,
+                    )
+            if menu_txt is None:
+                menu_txt = item[0]
+
+            # Display the menu text, and invert the currently selected line.
+            self._menuLine(menu_txt, i, i == vp_sel, self._isSubMenu(item[1]))
         self._show()
 
     def _moveSelection(self, inc: int, wrap: bool = True):
