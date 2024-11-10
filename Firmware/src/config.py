@@ -4,26 +4,27 @@ Project configuration file.
 ADC inputs per battery controller.
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-These constants sets the ADCTracker tracer input config for the various
-monitors.
+The `B0`, `B1`, `B2` and `B3` constants sets up `BatteryControllerCFG`
+configs to be used for `BatteryController` instances for each BCM.
 
-In order to monitor the charge current on the TP4056 module, we monitor the
-voltage on the PROG pin as per the datasheet. The charge current at this
-point can then be calculated using the formula::
+In order to monitor the charge current on the TP4056_ module, we monitor the
+voltage on the PROG pin as per the datasheet. The charge current at this point
+can then be calculated using the formula::
 
           Vprog
     Ich = ----- x 1200
           Rprog
 
-where ``Rprog`` is value of the current programming resistor on the board. For
-a 1000mA charge current a 1200Ω resistor should be used for ``Rprog``. Since
-these boards normally have a 1200Ω resistor installed, they are set to charge
-at 1000mA.  
+where ``Rprog`` is the value of the current programming resistor on the board.
+
+For a 1000mA charge current a 1200Ω resistor should be used for ``Rprog``.
+Since these boards normally have a 1200Ω resistor installed, they are set to
+charge at 1000mA.  
 From the formula above, the 1200 multiplier cancels the 1200Ω resistor
 divisor, leaving the charge current (``Ich``) equal to the voltage measured on
 the pin (``Vprog``).
 
-To use the ``PROG`` pin of the TP4056 as charge monitor input for the
+To use the ``PROG`` pin of the TP4056_ as charge monitor input for the
 `BatteryController`, we can effectively say the "current sensing" resistor is
 1Ω.
 
@@ -36,28 +37,38 @@ ADC config definitions
 ~~~~~~~~~~~~~~~~~~~~~~
 
 Since there may be ADC inputs spread across multiple ADS1115_ modules, and we
-want to define an ADC input to be either a normal voltage monitor, a current
-monitor (see above) or a charge monitor (see above), we need a compact way to
-designate these inputs.
+want to define an ADC input to be either a normal voltage monitor
+(`VoltageMonitor`), a current monitor (`CurrentMonitor`) or a charge monitor
+(`ChargeMonitor`), we define each input as a `ChannelMonitor` which defines
+both the `ADCChannel` and the monitor type for the specific channel. See
+`ADCChannel` for more info on the available monitor types.
 
-We will do this using a string value as follows::
 
-    "addr:chan[:R[:c]]"
+Attributes:
+    PIN_LED: Onboard LED pin. Default for S2 Mini
+    PIN_SDA: I²C SDA pin used on S2 Mini for Host
+    PIN_SCL: I²C SCL pin used on S2 Mini for Host
+    I2C_INT_PULLUP: Whether to use internal pullups for I²C or not. Default is
+        enable pullups
+    I2C_FREQ: Default I²C Frequency to run at.
+    i2c: An I²C instance available for all, created from `PIN_SDA`, `PIN_SCL`,
+        `I2C_INT_PULLUP` and `I2C_FREQ` configs.
 
-where:
+    OLED_ADDR: I²C address for SSD1306 OLED
+    OLED_W: OLED width in pixels
+    OLED_H: OLED height in pixels
 
-* ``addr`` is the ADS1115_ module's I²C address either in hex (``0x48``)
-   or decimal (``73``) format. See `lib.charge_controller.ADC_ADDRS` for valid
-   addresses.
-* ``chan`` is the channel number to set up on this module. Only values
-   from 0 - 3 are allowed and corresponds to the ``A0`` to ``A3`` ADC
-   input channels on the module
-* ``R`` is a resistor value in ohm if this is a current monitor
-  channel. See the class documentation of the different channel types.
-* ``c`` is appended to make this a charge monitor channel. See the
-  class documentation of the different channel types.
+    ENC_CLK: GPIO for encoder ``clk`` pin.
+    ENC_DT: GPIO for encoder ``data`` pin.
+    ENC_SW: GPIO for encoder ``switch`` pin. Will enable internal pull up for
+        this pin.
+
+    LOAD_R: The value to use for all BCM load resistors. This is the resistor
+        used for discharge measurement. Currently all BCM Controllers are
+        expected to use the same load resistor value. The unit is ohm (Ω).
 
 .. _ADS1115: https://components101.com/modules/ads1115-module-with-programmable-gain-amplifier
+.. _TP4056: https://components101.com/modules/tp4056a-li-ion-battery-chargingdischarging-module
 """
 
 from micropython import const
@@ -70,19 +81,14 @@ from structures import (
     ChargeMonitor,
 )
 
-# Pins used on the S2 Mini
+# Pins used on the S2 Mini. See docstring Attributes for more.
 PIN_LED = 15
-"""Onboard LED pin. Default for S2 Mini"""
 
-# I²C pins used on the host board
+# I²C pins used on the host board. See docstring Attributes for more.
 PIN_SDA = const(36)
-"""I²C SDA pin used on S2 Mini for Host"""
 PIN_SCL = const(34)
-"""I²C SCL pin used on S2 Mini for Host"""
 I2C_INT_PULLUP = True
-"""Whether to use internal pullups for I²C or not. Default is enable pullups"""
 I2C_FREQ = const(4000000)
-"""Default I²C Frequency to run at."""
 # We also just create an I²C instance right here since it is needed all over
 # the place
 i2c = I2C(
@@ -90,20 +96,13 @@ i2c = I2C(
     sda=Pin(PIN_SDA, pull=Pin.PULL_UP if I2C_INT_PULLUP else None),
     freq=I2C_FREQ,
 )
-"""
-An I²C instance available for all, created from `PIN_SDA`, `PIN_SCL`,
-`I2C_INT_PULLUP` and `I2C_FREQ` configs.
-"""
 
-# OLED
+# OLED. See docstring Attributes for more.
 OLED_ADDR = 0x3C
-"""I²C address for SSD1306 OLED"""
 OLED_W = const(128)
-"""OLED width in pixels"""
 OLED_H = const(64)
-"""OLED height in pixels"""
 
-# Encoder pins
+# Encoder pins. See docstring Attributes for more.
 ENC_CLK = const(4)
 ENC_DT = const(2)
 ENC_SW = const(1)
@@ -135,8 +134,6 @@ ENC_SW = const(1)
 # it more difficult to change this at runtime, but for now this should be OK.
 # We can revisit how to set this resistor value dynamically later.
 LOAD_R = 5  # 5Ω load resistor
-"""Load resistance value in Ohm. Default is 5Ω"""
-
 
 B0 = BatteryControllerCFG(
     "BC0",
@@ -159,16 +156,16 @@ B0 = BatteryControllerCFG(
     ),
 )
 """
-    Battery 0 config.
+    Battery 0 config - `BatteryControllerCFG`.
 
-    ========= ======= ==== ==== ========
-    Function  GPIO    ADC  ADC  Resistor
-              Control Addr Chan
-    ========= ======= ==== ==== ========
-    Charge      16    0x48  2   1
-    Discharge   18    0x48  0   `LOAD_R`
-    Bat V       n/a   0x48  1   n/a
-    ========= ======= ==== ==== ========
+    ========= ================ ======= ==== ==== ========
+    Function      Type         GPIO    ADC  ADC  Resistor
+                               Control Addr Chan
+    ========= ================ ======= ==== ==== ========
+    Charge    `ChannelMonitor`   16    0x48  2   1
+    Discharge `ChannelMonitor`   18    0x48  0   `LOAD_R`
+    Bat V     `VoltageMonitor`   n/a   0x48  1   n/a
+    ========= ================ ======= ==== ==== ========
 """
 
 B1 = BatteryControllerCFG(
@@ -192,16 +189,16 @@ B1 = BatteryControllerCFG(
     ),
 )
 """
-    Battery 1 config.
+    Battery 1 config - `BatteryControllerCFG`.
 
-    ========= ======= ==== ==== ========
-    Function  GPIO    ADC  ADC  Resistor
-              Control Addr Chan
-    ========= ======= ==== ==== ========
-    Charge      33    0x49  2   1
-    Discharge   35    0x48  3   `LOAD_R`
-    Bat V       n/a   0x49  3   n/a
-    ========= ======= ==== ==== ========
+    ========= ================ ======= ==== ==== ========
+    Function      Type         GPIO    ADC  ADC  Resistor
+                               Control Addr Chan
+    ========= ================ ======= ==== ==== ========
+    Charge    `ChannelMonitor`   33    0x49  2   1
+    Discharge `ChannelMonitor`   35    0x48  3   `LOAD_R`
+    Bat V     `VoltageMonitor`   n/a   0x49  3   n/a
+    ========= ================ ======= ==== ==== ========
 """
 
 B2 = BatteryControllerCFG(
@@ -225,16 +222,16 @@ B2 = BatteryControllerCFG(
     ),
 )
 """
-    Battery 2 config.
+    Battery 2 config - `BatteryControllerCFG`.
 
-    ========= ======= ==== ==== ========
-    Function  GPIO    ADC  ADC  Resistor
-              Control Addr Chan
-    ========= ======= ==== ==== ========
-    Charge      37    0x4A  0   1
-    Discharge   39    0x49  1   `LOAD_R`
-    Bat V       n/a   0x49  0   n/a
-    ========= ======= ==== ==== ========
+    ========= ================ ======= ==== ==== ========
+    Function      Type         GPIO    ADC  ADC  Resistor
+                               Control Addr Chan
+    ========= ================ ======= ==== ==== ========
+    Charge    `ChannelMonitor`   37    0x4A  0   1
+    Discharge `ChannelMonitor`   39    0x49  1   `LOAD_R`
+    Bat V     `VoltageMonitor`   n/a   0x49  0   n/a
+    ========= ================ ======= ==== ==== ========
 """
 
 B3 = BatteryControllerCFG(
@@ -258,14 +255,14 @@ B3 = BatteryControllerCFG(
     ),
 )
 """
-    Battery 3 config.
+    Battery 3 config - `BatteryControllerCFG`.
 
-    ========= ======= ==== ==== ========
-    Function  GPIO    ADC  ADC  Resistor
-              Control Addr Chan
-    ========= ======= ==== ==== ========
-    Charge      40    0x4A  3   1
-    Discharge   38    0x4A  2   `LOAD_R`
-    Bat V       n/a   0x4A  1   n/a
-    ========= ======= ==== ==== ========
+    ========= ================ ======= ==== ==== ========
+    Function      Type         GPIO    ADC  ADC  Resistor
+                               Control Addr Chan
+    ========= ================ ======= ==== ==== ========
+    Charge    `ChannelMonitor`   40    0x4A  3   1
+    Discharge `ChannelMonitor`   38    0x4A  2   `LOAD_R`
+    Bat V     `VoltageMonitor`   n/a   0x4A  1   n/a
+    ========= ================ ======= ==== ==== ========
 """
