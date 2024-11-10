@@ -6,8 +6,7 @@ import sys
 import select
 import utime as time
 import uasyncio as asyncio
-from config import i2c
-from lib.charge_controller import ChargeControl
+from config import i2c, B0, B1, B2, B3
 from lib.charge_controller import BatteryController
 from screens import uiSetup
 
@@ -97,8 +96,8 @@ async def showState(ch_ctl: BatteryController):
 
 
 # Set up the charge controller and screens
-ChCtl = ChargeControl(i2c)
-uiSetup(ChCtl.ctlNames())
+ch_ctls = [BatteryController(i2c, bat_cfg) for bat_cfg in (B0, B1, B2, B3)]
+uiSetup(ch_ctls)
 
 # get the asyncio loop and run forever
 loop = asyncio.get_event_loop()

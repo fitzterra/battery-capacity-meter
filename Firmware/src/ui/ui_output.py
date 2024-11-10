@@ -167,6 +167,12 @@ class Screen:
           of `FONT_W` and `FONT_H`.
           Currently only the characters in one row can be inverted.
 
+
+        Note:
+            The inverting mechanism is very simple an relies on the fact that
+            the font is 8x8 pixels per character. Should this ever change, the
+            inverting mechanism needs to be revisited.
+
         Args:
             x: Column in character coordinate units of first character to
                 invert.
@@ -216,6 +222,70 @@ class Screen:
         for i in range(offs, end):
             # By XORing with 0xFF we invert each bit
             self._display.buffer[i] ^= 0xFF
+
+    def nameAsHeader(self, fmt: str | None = None):
+        """
+        Shows the current screen name as a header at the top of the screen.
+
+        There are some basic formatting options available which can be set as
+        characters in a format string. The formatting characters available are:
+
+        * **Alignment**. If any of these characters appears in ``fmt`` string, they
+          will be used to set alignment. If the header is longer than the space
+          available, any formatting will be disregarded with the header left
+          aligned, and extra text clipped off the end.
+
+            * ``^``: Align center.
+            * ``>``: Right align.
+            * ``<``: Left align.
+
+        * **Invert**: The character ``i`` in ``fmt`` will invert the full header
+            line.
+        * **Underline**: The '_' character will cause an line to be drawn on
+            the last pixel row of the header line. Note that this will
+            intersect with any text drawn on the last pixel row.
+        * **Overline**: The '-' character will cause an line to be drawn in the
+            first pixel row of the header line. Note that this will intersect
+            with any text drawn on the last pixel row.
+
+        Note:
+            The order of characters in ``fmt`` does not matter. No validation is
+            done either, so any other characters appearing in the string will
+            have no effect.
+
+        Examples:
+
+        * ``^i`` or ``i^`` will center and invert the header
+        * ``>_`` will right align and draw an underline
+        * ``_^-`` will center and draw and underline and overline.
+
+        Args:
+            fmt: See above.
+        """
+        # This will be the max number of characters we have in the line
+        width = self._max_cols
+        # Any alignment? We default to no alignment
+        align = ""
+        for a in ("^", "<", ">"):
+            if a in fmt:
+                align = a
+                break
+
+        # Set up the header with alignment and width
+        header = f"{self.name:{align}{width}.{width}s}"
+        self._display.text(header, 0, 0, 1)
+        # If we invert, we do not even look at the under/over line options
+        if "i" in fmt:
+            self._invertText(0, 0)
+            return
+
+        # Overline and underline
+        if "_" in fmt:
+            # Draw a line below the title
+            self._display.hline(0, self.FONT_H - 1, self.px_w, 1)
+        if "-" in fmt:
+            # Draw a line above the title
+            self._display.hline(0, 0, self.px_w, 1)
 
     def _show(self):
         """

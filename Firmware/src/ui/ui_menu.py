@@ -150,18 +150,16 @@ class Menu(Screen):
 
         The text is printed starting from the leftmost pixel on the display.
 
-        If ``txt`` has more characters than `_max_cols`, it is clipped to
-        fit on the display.
-
-        NOTE!: The inverting mechanism is very simple an relies on the fact
-        that the font is 8x8 pixels per character. Should this ever change, the
-        inverting mechanism needs to be revisited.
+        If ``txt`` has more characters than the base `Screen._max_cols`, it is
+        clipped to fit on the display.
 
         Args:
             txt: The text to display
             y : The line at which to display the text - 0 based, with 0 at the
                 top.
             selected: Will invert the text if True
+            submenu: Indicates if this is a submenu. If True the line is
+                rendered to indicate that it leads to a submenu.
         """
         # Make sure to always clip the text to max width
         txt = txt[: self._max_cols]
@@ -206,12 +204,8 @@ class Menu(Screen):
 
         # Do we add a title?
         if self._title:
-            self._display.text(
-                f"{self.name:^{self._max_cols}.{self._max_cols}}", 0, 0, 1
-            )
-            # Draw a line above and below the title
-            self._display.hline(0, 0, self.px_w, 1)
-            self._display.hline(0, self.FONT_H - 1, self.px_w, 1)
+            # Show the name as header, centered with over and under lines.
+            self.nameAsHeader(fmt="^_-")
 
         # Nothing to set up, so let's get on with it.
         self.update()
