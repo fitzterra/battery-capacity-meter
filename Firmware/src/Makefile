@@ -94,6 +94,7 @@ MPY_SRC = boot.py \
 		  main.py \
 		  config.py \
 		  structures.py \
+		  net_conn.py \
 		  ui/__init__.py \
 		  ui/ui_input.py \
 		  ui/ui_output.py \
