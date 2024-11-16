@@ -2,6 +2,8 @@
 Various utilities and functions.
 """
 
+import time
+
 
 class NullLogger:
     """
@@ -55,3 +57,45 @@ class NullLogger:
         # we return the do-nothing method on any call for getting instance
         # attributes.
         return method
+
+
+def genBatteryID(last_id: int = 0):
+    """
+    Generates a new Battery ID.
+
+    The Battery ID is used to identify individual batteries in order to track
+    their capacity over time.
+
+    This function will generate a new ID for a battery that does not have one
+    already. The Battery ID can be any string, but to make things easier, we
+    standardise on an ID of:
+
+        yyyymmddnnn
+
+    where:
+
+        * ``yyyymmdd`` is the local year, month and date
+        * ``nnn`` will be ``last_id + 1``. The idea being that the last day ID
+            used is tracked somewhere else and this will be increased for each
+            new battery tested for that day.
+
+    Note:
+        The local date and time will be set to 2000-01-01 00:00:00 on power up.
+        To get an accurate battery ID, it is important to make sure `syncTime()`
+        was run and has been successful. If not, then the default date/time
+        will be used.
+
+    Args:
+        last_id: The last ID used today. It will be incremented and returned as
+            the second element of the returned tuple. The caller should then
+            use this value to update wherever it stores the last ID used for
+            the day. This will then be the input again on the next call here.
+
+    Returns:
+        A two tuple:
+            (battery ID string as above, new ``last_id`` value)
+    """
+    new_id = last_id + 1
+    date = "".join(str(p) for p in time.localtime()[:3])
+
+    return (f"{date}{new_id:03d}", new_id)

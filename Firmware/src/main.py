@@ -36,9 +36,7 @@ async def showState(ch_ctl: BatteryController):
     poller = select.poll()
     poller.register(sys.stdin, select.POLLIN)
 
-    header = (
-        "| State | Ch | DCh | Bat V | VJump | Ch C | CJump | Dch C | DcJump | MonT |"
-    )
+    header = "| State | Ch | DCh | Bat V | VJump | Ch C | CJump | Dch C | DcJump | MonT | ID        |"
     show_header = 10
 
     while True:
@@ -90,6 +88,7 @@ async def showState(ch_ctl: BatteryController):
             + f"|{int(state['dch_c']):>5}mA"
             + f"| {state['dc_jump']:7}"
             + f"| {state['mon_t']:5}"
+            + f"| {state['bat_id']}"
             + "|"
         )
         show_header += 1

@@ -223,6 +223,96 @@ class Screen:
             # By XORing with 0xFF we invert each bit
             self._display.buffer[i] ^= 0xFF
 
+    def text(self, txt, fmt: str = "w", x: int = 0, y: int = 0, color: int = 1):
+        """
+        Displays a string with various formatting options
+
+        The ``fmt`` string can be used to specify certain formatting options.
+        These are:
+
+        * ``w``: Wrap on spaces.
+            Any word that is longer than the available width will be wrapped on
+            the last available character on the line, for as many lines as is
+            needed or until we run out of display lines.
+        * ``(^, <, >)``: Alignment specifier.
+            These specify possible alignment of center (``^``), left (``<``) or
+            right (``>``). If there are multiple of these in ``fmt``, the first
+            one found will be used, of if not given, right alignment will be the
+            default.
+
+        Note:
+            **No validation** is done on the args. If you use invalid values,
+            you will have a hard time debugging possibly weird issues - you
+            have been warned.
+
+        ToDo:
+            Add a width and height option to work along with the ``x`` and
+            ``y`` coordinates to specify a block in which to place the text.
+            Currently it's a bit weird if either ``x`` or ``y`` is given and
+            the end for alignment is the right and bottom display edges.
+
+        Args:
+            txt: The string to display
+            fmt: Optional formatting. See above.
+            x: The x (character) coordinate to start the display. If non zero
+                and wrapping occurs, the wrapped line will also start at this x
+                coord.
+            y: The y (character) coordinate to start the display
+            color: The color to use
+        """
+        # pylint: disable=too-many-arguments,too-many-positional-arguments
+
+        # How many characters do have available in the X direction, taking the
+        # start x coord into account
+        avail_x = self._max_cols - x
+
+        # If we're not wrapping we simply clip the full txt string
+        if "w" not in fmt:
+            txt = txt[:avail_x]
+
+        # Figures out the text alignment from `fmt` by looking for any
+        # alignment characters. Alignment will be set to the first alignment
+        # character found in `fmt` or to left aligned by default.
+        align = ([f for f in fmt if f in ["^", "<", ">"]] or ["<"])[0]
+
+        # At this point we will treat it as if we are wrapping
+        while txt:
+            # As soon as y reached max rows, we are done
+            if y >= self._max_rows:
+                return
+
+            # Find the next space to break at
+            break_at = None
+            idx = 0
+            while idx <= avail_x:
+                if idx == len(txt):
+                    # We have exhausted the input text. We set to break here
+                    # and exit the loop
+                    break_at = idx
+                    break
+                if txt[idx] == " ":
+                    # We make break_at the next position because wit will be
+                    # used later as non-inclusive list end fragment
+                    break_at = idx + 1
+                idx += 1
+            if break_at is None:
+                # We could not find anywhere to break, so we break on the max
+                # available chars we have.
+                break_at = avail_x
+            elif idx < len(txt) and txt[idx] == " ":
+                break_at = idx
+            # Extract a line
+            ln = txt[:break_at].strip()
+            # Remove this bit from the remainder of txt
+            txt = txt[break_at:].lstrip()
+
+            # Display it
+            self._display.text(
+                f"{ln:{align}{avail_x}s}", x * self.FONT_W, y * self.FONT_H, color
+            )
+            # Advance y
+            y += 1
+
     def nameAsHeader(self, fmt: str | None = None):
         """
         Shows the current screen name as a header at the top of the screen.
@@ -297,7 +387,7 @@ class Screen:
         """
         self._display.show()
 
-    def _clear(self, color: int = 0, show: bool = False):
+    def _clear(self, color: int = 0, show: bool = False, header_lns: int = 0):
         """
         Convenience function to clear the screen.
 
@@ -305,8 +395,24 @@ class Screen:
             color: The color to clear the screen to. Defaults to black (0).
             show: If True, then the display will be updated to show the change.
                 If False, the default, then the caller will have to do so.
+            header_lns: If not 0, then this is the number of headers lines that
+                show be left in tact and not cleared.
         """
-        self._display.fill(color)
+        # If there is no header, we can simply use the fill() method which
+        # fills the full screen.
+        if not header_lns:
+            self._display.fill(color)
+        else:
+            # We need to use the rect method todo the clearing
+            self._display.rect(
+                0,  # From x==0
+                header_lns * self.FONT_H,  # Skip the header lines
+                self.px_w,  # The full width in pixels
+                self.px_h - self.FONT_H,  # The full heigh minus one character line
+                color,  # Fill color
+                True,  # Fill the rectangle
+            )
+
         if show:
             self._show()
 
@@ -358,7 +464,7 @@ class Screen:
         focus again.
         """
         # pylint: disable=too-many-branches
-        logging.debug("Starting asyncio input monitor for screen %s", self.name)
+        logging.debug("Screen %s: Starting asyncio input monitor", self.name)
 
         while self._display is not None:
             # We wait for input
@@ -382,7 +488,10 @@ class Screen:
                 continue
 
             logging.debug(
-                "Input event: %s - %s", self._event_in.e_type, self._event_in.e_val
+                "Screen %s: Input event: %s - %s",
+                self.name,
+                self._event_in.e_type,
+                self._event_in.e_val,
             )
 
             # These event types are specific to a rotary encoder with button.
@@ -397,7 +506,9 @@ class Screen:
                     self.actCCW()
                 else:
                     logging.error(
-                        "Not a valid rotation direction: %s", self._event_in.e_val
+                        "Screen %S: Not a valid rotation direction: %s",
+                        self.name,
+                        self._event_in.e_val,
                     )
             elif self._event_in.e_type == EV_BUTTON:
                 if self._event_in.e_val == SHORT_PRESS:
@@ -406,16 +517,22 @@ class Screen:
                     self.actLong()
                 else:
                     logging.error(
-                        "Not a valid button press value: %s", self._event_in.e_val
+                        "Screen %s: Not a valid button press value: %s",
+                        self.name,
+                        self._event_in.e_val,
                     )
             else:
-                logging.error("Invalid event type: %s", self._event_in.e_type)
+                logging.error(
+                    "Screen %s: Invalid event type: %s",
+                    self.name,
+                    self._event_in.e_type,
+                )
 
             # Clear the event, if we still have it at this point
             if self._event_in is not None:
                 self._event_in.clear()
 
-        logging.info("Exiting input event monitor for screen %s", self.name)
+        logging.info("Screen %s: Exiting input event monitor", self.name)
 
     async def _refresh(self):
         """
@@ -438,13 +555,13 @@ class Screen:
         This task will auto terminate when the screen looses focus, but will
         again be started when getting focus later.
         """
-        logging.info("Starting auto refresh task for screen %s", self.name)
+        logging.info("Screen %s: Starting auto refresh task.", self.name)
 
         while self._display is not None:
             self.update()
             await asyncio.sleep_ms(self.AUTO_REFRESH)
 
-        logging.info("Exiting auto refresh task for screen %s", self.name)
+        logging.info("Screen %s: Exiting auto refresh task.", self.name)
 
     def focus(
         self, display: SSD1306_I2C, event: asyncio.Event, focus_on_exit: "Screen" = None
@@ -534,7 +651,7 @@ class Screen:
         if screen is None:
             screen = self._focus_on_exit
 
-        logging.info("Passing focus to screen %s", screen.name)
+        logging.info("Screen %s: Passing focus to screen %s", self.name, screen.name)
 
         # Before passing the event, lets just clear it
         self._event_in.clear()
@@ -588,7 +705,7 @@ class Screen:
 
         The derived class should override this if needed.
         """
-        logging.info("Screen %s ignoring the UP action.", self.name)
+        logging.info("Screen %s: Ignoring the UP action.", self.name)
 
     def actCW(self):
         """
@@ -596,7 +713,7 @@ class Screen:
 
         The derived class should override this if needed.
         """
-        logging.info("Screen %s ignoring the DOWN action.", self.name)
+        logging.info("Screen %s: Ignoring the DOWN action.", self.name)
 
     def actShort(self):
         """
@@ -611,12 +728,12 @@ class Screen:
 
         The derived class could override this if needed.
         """
-        logging.info("Screen %s received the SHORT PRESS action.", self.name)
+        logging.info("Screen %s: Received the SHORT PRESS action.", self.name)
         if self._focus_on_exit is not None:
-            logging.info("Screen %s auto returning focus on short click", self.name)
+            logging.info("Screen %s: Auto returning focus on short click", self.name)
             self._passFocus(None)
         else:
-            logging.info("Screen %s ignoring the SHORT PRESS action.", self.name)
+            logging.info("Screen %s: Ignoring the SHORT PRESS action.", self.name)
 
     def actLong(self):
         """
@@ -624,4 +741,4 @@ class Screen:
 
         The derived class should override this if needed.
         """
-        logging.info("Screen %s ignoring the LONG PRESS action.", self.name)
+        logging.info("Screen %s: Ignoring the LONG PRESS action.", self.name)
