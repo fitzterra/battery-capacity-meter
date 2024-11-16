@@ -15,12 +15,15 @@ import gc
 from micropython import const
 from ssd1306 import SSD1306_I2C
 from lib import ulogging as logging
+from lib.utils import genBatteryID
 from lib.charge_controller import BatteryController
 from ui import (
     Screen,
     setupEncoder,
     input_evt,
     Menu,
+    FieldEdit,
+    F_TYPES,
 )
 from config import (
     Pin,
@@ -182,7 +185,7 @@ class Config(Screen):
         # Show the Screen name centered in line 0
         self.nameAsHeader(fmt="^")
 
-        self._display.text("To be done...", 0, 3 * 8)
+        self.text("To be done...", fmt="^w", y=3)
 
         self.update()
 
@@ -200,6 +203,28 @@ class Config(Screen):
 class BCMView(Screen):
     """
     Views and controls Battery Capacity Meter modules.
+
+    Attributes:
+
+        bci: Set from the ``bci`` arg to `__init__` as a `BatteryController`
+            instance.
+
+        _bat_id_cnt: Counter to be used to make unique battery IDs.
+
+            Gets incremented every time we change a battery. Used when calling
+            `genBatteryID` and updated from the return value.
+
+        bat_id_input: A `FieldEdit` input screen to set the Battery ID.
+
+            This screen will get focus when it is detected that a battery was
+            inserted but the `bci` does not have a battery ID
+            (`BatteryController.bat_id`) set.
+
+            A default ID will be generated using `genBatteryID()` and the user
+            will be able to modify this if this is for a Battery that already
+            has an ID for example. Once ``OK`` is selected on this screen, the
+            setter, `_setBatID` will be called to update the battery ID for
+            `bci`.
     """
 
     # The auto refresh rate
@@ -210,11 +235,22 @@ class BCMView(Screen):
         Overrides base init.
 
         Args:
-            name, px_w, px_h: See `Screen` base class documentation.
+            name, px_w, px_h:  See `Screen` base class documentation.
             bci: `BatteryController` instance to control and monitor.
         """
         super().__init__(name, px_w, px_h)
         self.bci = bci
+        self._bat_id_cnt = 0
+        # A field
+        self.bat_id_input = FieldEdit(
+            "Bat ID",
+            self.px_w,
+            self.px_h,
+            max_len=11,
+            val=self.bci.bat_id,
+            f_type="num",
+            setter=self._setBatID,
+        )
 
     def _showHeader(self):
         """
@@ -223,6 +259,17 @@ class BCMView(Screen):
         header = f"{self.name:^{self._max_cols}}"
         self._display.text(header, 0, 0, 1)
         self._invertText(0, 0)
+
+    def _setBatID(self, val, _):
+        """
+        Called to set the ID for the currently inserted battery.
+
+        This is the `FieldEdit._setter` callback for the `bat_id_input` screen.
+        We do not use the ``field_id`` for this field entry screen and thus has
+        this args set as ``_``.
+        """
+        self.bci.bat_id = val.decode("utf-8")
+        logging.info("Screen %s: Setting battery ID to: %s", self.name, self.bci.bat_id)
 
     def setup(self):
         """
@@ -241,6 +288,14 @@ class BCMView(Screen):
             self._show()
             return
 
+        # Show the battery ID if we have one
+        if self.bci.bat_id:
+            label = "B_ID:"
+            id_w = self._max_cols - len(label)
+            self._display.text(
+                f"{label}{self.bci.bat_id:>{id_w}.{id_w}}", 0, 1 * self.FONT_H, 1
+            )
+
         # Call our base to setup the auto refresher task
         super().setup()
 
@@ -248,8 +303,42 @@ class BCMView(Screen):
         """
         Updates the display.
         """
+        # Clear the screen, leaving the header in tact.
+        self._clear(header_lns=1 if not self.bci.bat_id else 2)
+
         # Get the current status
         status = self.bci.status()
+
+        # If the status is Unkown, we do not know what to do
+        if status["state"] == BatteryController.ST_UNKNOWN:
+            self.text(
+                "Unknown battery status. Waiting for it become known...", fmt="w^", y=2
+            )
+            self._show()
+            return
+
+        # Are we waiting for a battery to be inserted?
+        if status["state"] == BatteryController.ST_NOBAT:
+            self.text("Waiting for battery to be inserted...", fmt="w^", y=2)
+            # Clear the batID that may still be displayed
+            self._display.rect(0, 1 * self.FONT_H, self.px_w, self.FONT_H, 0, 1)
+            self._show()
+            return
+
+        # Do we still need an ID for a newly inserted battery?
+        if status["state"] == BatteryController.ST_BATINS and self.bci.bat_id is None:
+            # Generate a new battery ID, using our counter value, and update
+            # the counter value from the result.
+            b_id, self._bat_id_cnt = genBatteryID(self._bat_id_cnt)
+            # Set the new Battery ID, and then pass focus to the Battery ID
+            # FieldEdit screen in self.bat_id_input
+            self.bat_id_input.setVal(b_id)
+            self._passFocus(self.bat_id_input, return_to_me=True)
+            return
+
+        # If we get here, we are waiting to charge/discharge or we are fully
+        # charged or discharged, and we have a battery ID. Unknown, yanked, no
+        # bat and freshly inserted has been dealt with.
 
         ln = 3
 

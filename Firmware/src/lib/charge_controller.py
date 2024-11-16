@@ -246,6 +246,94 @@ class BatteryController:
     +--------+---------+-------+--------+---------+-------------+----------------+
 
 
+    Attributes:
+        ADC_GAIN: Gain setting for small ADC values. See code for more details.
+
+        ADC_RATE: Default ADC conversion rate index. See code for more info.
+
+        ST_NOADC: One or more of the ADC input addresses are not available on
+            the I²C bus. This controller is not available to use in this state.
+        ST_NOBAT: No Battery: Not charging or discharging and Voltage monitor
+            is at 0V.
+        ST_BATINS: Battery Installed: Not charging or discharging and voltage
+            monitor > 2.6V.
+        ST_CHARGING: Charging: Battery is being charged. Charge is on and
+            current flowing.
+        ST_DISCHARGING: Discharging: Battery is being discharged. Discharge is
+            on and current flow.
+        ST_CHARGED: Charging is complete. Charge is on, bat at full voltage and
+            no current flow.
+        ST_DISCHARGED: Discharging is complete. Voltage dropped to min and
+            current stopped when protection kicked in.
+        ST_YANKED: The battery was removed while charging or discharging.
+        ST_UNKNOWN: The current status is unknown at the moment.
+
+        JUMP_THRESHOLDS: Thresholds set for the different monitors to detect
+            large value jumps between readings.
+
+            This is to mostly to detect a battery being yanked (or possibly
+            inserted?) while dis/charging, or for any other anomalies that
+            could indicate issues:
+
+            - **bat_v**: Battery voltage change threshold in mV
+            - **ch_c**: Charge current change threshold in mA
+            - **dch_c**: Charge current change threshold in mA
+
+        _i2c: Set from ``i2c`` param to `__init__`
+
+        cfg: Set from ``cfg`` param to `__init__`
+
+        sample_period: Set from ``sample_period`` param to `__init__`
+
+        _alpha: Alpha value for weighted average calculations.
+
+            This value is calculated for the exponentially weighted average we
+            calculate for all samples using `ewAverage()`. We calculate this to
+            be the average over the number of samples we will take in 1 second:
+            ``1 / sample_period``
+
+        state: This will be set to one of the ``ST_???`` status constants
+            defined for the class.
+
+        _me: Shortcut to ``self.__class__.__name__`` Used in log messages to
+            identify the log source.
+
+        _jump_flags: Keeps track of last battery voltage, charge and discharge
+            readings, as well as flags to indicate if there were big jumps in
+            these values between readings.
+
+            Each key has a corresponding key in `JUMP_THRESHOLDS` for the
+            specific value to track.
+
+            The values are 2-element lists as: ``[last_value, jumped]`` where
+            the ``last_value`` element keeps track of the previous value read
+            for this metric (None on reset), and the ``jumped`` element being a
+            boolean to indicate if a jump was detected.
+
+            The ``last_value`` may also be a negative value (set via `reset()`)
+            to start a settlement period during which big jumps are ignored.
+            This is normally right after starting or ending a charge/discharge
+            cycle if needed.
+
+            These can be reset via the `reset()` method.
+
+        _mon_time: Records the time each monitor run takes.
+
+            This is used to get a view on if there is too much being done per
+            monitor loop. This value must be well below `sample_period` to
+            ensure there is time to do other things besides monitoring.
+
+        bat_id: An identifier for this battery.
+
+            This can be used to keep track
+            of charge cycles and status for a specific battery over time. The
+            application may set this ID from a UI or similar when a new battery
+            is inserted for this controller. Usually this ID will be available
+            on the battery (written, label, etc.). When the controller detects
+            that the battery was removed, it will automatically reset this ID
+            to None, ready for a new battery.
+
+
     .. _ADS1115: https://components101.com/modules/ads1115-module-with-programmable-gain-amplifier
     .. _datasheet: https://www.ti.com/lit/gpn/ads1115
     .. _Coulomb: https://en.wikipedia.org/wiki/Coulomb
@@ -259,8 +347,7 @@ class BatteryController:
     # Scale Reading (FSR) which is ±6.144V or a granularity of 187.5µV per value.
     # The ads1x15 lib uses a gain mapping where the first entry (0) is the one we
     # need for the gain we require.
-    ADC_GAIN = const(0)
-    """Gain setting for small ADC values. See code for more details."""
+    ADC_GAIN: int = const(0)
 
     # Set the sampling rate. This is an index into the rates map of the ads1x15
     # module and sets the rate at which the ADS1115 will do the AD conversions. See
@@ -269,45 +356,24 @@ class BatteryController:
     # while the max rate of 7 samples at 860 samples per sec (±19ms to sample all
     # four channels, but less accurate). The default rate of 4 does 128 samples per
     # sec and takes about 50ms for a 4 channels.
-    ADC_RATE = const(4)
-    """Default ADC conversion rate index. See code for more info."""
+    ADC_RATE: int = const(4)
 
-    # Different possible states
-    ST_NOADC = const(0)
-    """One or more of the ADC input addresses are not available on the I²C bus.
-    This controller is not available to use in this state."""
-    ST_NOBAT = const(1)
-    """No Battery: Not charging or discharging and Voltage monitor is at 0V"""
-    ST_BATINS = const(2)
-    """Battery Installed: Not charging or discharging and voltage monitor > 2.6V"""
-    ST_CHARGING = const(3)
-    """Charging: Battery is being charged. Charge is on and current flowing."""
-    ST_DISCHARGING = const(4)
-    """Discharging: Battery is being discharged. Discharge is on and current flow."""
-    ST_CHARGED = const(5)
-    """Charging is complete. Charge is on, bat at full voltage and no current flow."""
-    ST_DISCHARGED = const(6)
-    """Discharging is complete. Voltage dropped to min and current stopped when
-    protection kicked in."""
-    ST_YANKED = const(7)
-    """The battery was removed while charging or discharging."""
-    ST_UNKNOWN = const(99)
-    """The current status is unknown at the moment."""
+    # Different possible states - see class docstring Attributes section
+    ST_NOADC: int = const(0)
+    ST_NOBAT: int = const(1)
+    ST_BATINS: int = const(2)
+    ST_CHARGING: int = const(3)
+    ST_DISCHARGING: int = const(4)
+    ST_CHARGED: int = const(5)
+    ST_DISCHARGED: int = const(6)
+    ST_YANKED: int = const(7)
+    ST_UNKNOWN: int = const(99)
 
     JUMP_THRESHOLDS = {
         "bat_v": const(100),
         "ch_c": const(100),
         "dch_c": const(100),
     }
-    """Thresholds set for the different monitors to detect large value jumps
-    between readings. This is to mostly to detect 'n battery being yanked (or
-    possibly inserted?) while dis/charging, or for any other anomalies that
-    could indicate issues:
-
-    * **bat_v**: Battery voltage change threshold in mV
-    * **ch_c**: Charge current change threshold in mA
-    * **dch_c**: Charge current change threshold in mA
-    """
 
     def __init__(
         self,
@@ -328,56 +394,19 @@ class BatteryController:
                 an asyncio task and will start to run as soon as the asyncio
                 loop is started.
         """
-        self._i2c = i2c
-        """See `__init__`"""
-
+        self._i2c: I2C = i2c
         self.cfg = cfg
-        """See `__init__`"""
-
         self.sample_period = sample_period
-        """See `__init__`"""
-
         self._alpha = 1.0 / (1000 / self.sample_period)
-        """Calculated ``alpha`` value for the exponentially weighted average we
-        calculate for all samples using `ewAverage()`. We calculate this to be
-        the average over the number of samples we will take in 1 second:
-        ``1 / sample_period``"""
-
         self.state = None
-        """This will be set to one of the status constants defined for the class."""
-
         self._me = self.__class__.__name__
-        """Shortcut to ``self.__class__.__name__`` Used in log messages to
-        identify the log source."""
-
         self._jump_flags = {
             "bat_v": [None, False],
             "ch_c": [None, False],
             "dch_c": [None, False],
         }
-        """Keeps track of last battery voltage, charge and discharge readings,
-        as well as flags to indicate if there were big jumps in these values
-        between readings. Each key has a corresponding key in `JUMP_THRESHOLDS`
-        for the specific value to track.
-
-        The values are 2-element lists as: ``[last_value, jumped]`` where the
-        ``last_value`` element keeps track of the previous value read for
-        this metric (None on reset), and the ``jumped`` element being a boolean
-        to indicate if a jump was detected.
-
-        The ``last_value`` may also be a negative value (set via `reset()`) to
-        start a settlement period during which big jumps are ignored. This is
-        normally right after starting or ending a charge/discharge cycle if
-        needed.
-
-        These can be reset via the `reset()` method.
-        """
-
-        self._mon_time = 0
-        """Records the time each monitor run takes to get a view on if there is
-        too much being done per monitor loop. This value must be well below
-        `sample_period` to ensure there is time to do other things besides
-        monitoring."""
+        self._mon_time: int = 0
+        self.bat_id: str | None = None
 
         # Check if all ADCs are available
         self._checkADCs()
@@ -461,15 +490,24 @@ class BatteryController:
             # A battery at a voltage lower than this we are not interested
             # in since it is probably good for the dump anyway.
             if self.cfg.v_mon.mon.v > 2000:
+                # If the previous state was not ST_BATINS, a battery was just
+                # inserted now, so we reset the battery ID too
+                if self.state != self.ST_BATINS:
+                    logger.info(
+                        "%s - %s: Seems we just got a battery inserted. Resetting battery ID",
+                        self._me,
+                        self.cfg.name,
+                    )
+                    self.bat_id = None
                 self.state = self.ST_BATINS
             else:
                 self.state = self.ST_NOBAT
             return
 
-        # Must mean are charging or discharging. Check for a big voltage jump
-        # to see if the battery was yanked
+        # Must mean we are charging or discharging. Check for a big voltage
+        # jump to see if the battery was yanked
         if self._jump_flags["bat_v"][1]:
-            logger.error("Detected large voltage jump. Battery yanked!")
+            logger.error("%s: Detected large voltage jump. Battery yanked!", self._me)
             # First we need to switch dis/charging off
             if charging:
                 self.charge(False)
@@ -692,7 +730,10 @@ class BatteryController:
 
         # We can not start charging unless we are in the `ST_BATINS` state
         if set_to and not self.state == self.ST_BATINS:
-            logger.error("Can not start charging unless a battery is present.")
+            logger.error(
+                "%s.charge: Can not start charging unless a battery is present.",
+                self._me,
+            )
             return None
 
         # Set the new value and then read it back
@@ -755,7 +796,10 @@ class BatteryController:
 
         # We can not start discharging unless we are in the `ST_BATINS` state
         if set_to and not self.state == self.ST_BATINS:
-            logger.error("Can not start discharging unless a battery is present.")
+            logger.error(
+                "%s.charge: Can not start discharging unless a battery is present.",
+                self._me,
+            )
             return None
 
         # We can not switch charging on if we are currently discharging
@@ -843,7 +887,11 @@ class BatteryController:
         logger.info("%s.reset: Resetting monitor(s) for %s...", self._me, self.cfg.name)
 
         if jump_settle is not None and jump_settle >= 0:
-            logger.error("Ignoring invalid jump_settle value: %s", jump_settle)
+            logger.error(
+                "%s.reset: Ignoring invalid jump_settle value: %s",
+                self._me,
+                jump_settle,
+            )
             jump_settle = None
 
         # Instead of validating each of the monitor field names in monitors, we
@@ -899,6 +947,7 @@ class BatteryController:
                     'dch_c': int   # Last discharge current in mA
                     'dc_jump': bool,# True if a large discharge current jump was detected
                     'mon_t': int,  # Time in ms for the last monitor loop
+                    'bat_id': str|None, # The current `bat_id` value
                 }
         """
         logger.debug("%s.status: Getting status for %s ...", self._me, self.cfg.name)
@@ -924,6 +973,7 @@ class BatteryController:
             "dch_c": self.cfg.dch_mon.mon.c,
             "dc_jump": self._jump_flags["dch_c"][1],
             "mon_t": self._mon_time,
+            "bat_id": self.bat_id,
         }
 
         return status

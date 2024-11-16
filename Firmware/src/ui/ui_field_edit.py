@@ -1,5 +1,19 @@
 """
 UI Field Editor.
+
+Attributes:
+    C_SHOW: Cursor control.
+        Used by `FieldEdit._setCursor` to indicate cursor status.
+    C_HIDE: Cursor control.
+     Used by `FieldEdit._setCursor` to indicate cursor status.
+    M_CURSOR: Mode indicator: Cursor movement mode.
+        Rotations moves the cursor.
+    M_EDIT: Mode indicator: Character edit mode.
+        Rotations cycle the character being edited.
+    F_TYPES: Possible field types.
+        These are limited ASCII lists of characters that are allowed for fields
+        of this type. These lists are not overly memory efficient at the
+        moment. In future a better way to manage this may be explored.
 """
 
 from micropython import const
@@ -7,8 +21,8 @@ from lib import ulogging as logging
 from .ui_output import Screen
 
 # Cursor controls
-C_SHOW = const(0)
-C_HIDE = const(1)
+C_SHOW: int = const(0)
+C_HIDE: int = const(1)
 
 # Mode settings
 M_CURSOR = const(0)  # Cursor movement
@@ -21,9 +35,6 @@ F_TYPES = {
     "alnum": bytearray(rb"abcdefghijklmnopqrstuvwxyz 0123456789-+_", "ascii"),
     "ALnum": bytearray(rb"ABCDEFGHIJKLMNOPQRSTUVWXYZ 0123456789-+_", "ascii"),
 }
-"""Possible field types. These are limited ASCII lists of characters that are
-allowed for fields of this type. These lists are not overly memory efficient at
-the moment. In future a better way to manage this may be explored."""
 
 
 class FieldEdit(Screen):
@@ -40,8 +51,8 @@ class FieldEdit(Screen):
     * The field type - this defines the possible characters that may be
       contained in the field and which the rotary encoder will cycle through
       when changing a character in the field.
-    * An optional function to call when the OK is pressed to indicate the field
-      update is complete.
+    * An optional function to call when the ``OK`` button is pressed to
+      indicate the field update is complete.
 
     The label will be displayed with the actual field input below that in
     inverse video. This will be the number of characters allowed in the field.
@@ -51,29 +62,32 @@ class FieldEdit(Screen):
     Two *buttons*, ``OK`` and ``Cancel`` will be show at the bottom of the
     screen.
 
-    A cursor is shown as lines above and below the current character than is
+    A cursor is shown as lines above and below the current character that is
     selected. Rotating the encoder moves the cursor left and right. Moving past
-    the last char in the input field takes the cursor to the buttons. Move off
-    the buttons takes the cursor back to the input field.
+    the last char in the input field takes the cursor to the buttons.
+    Rotation moves between the buttons and moving off the buttons takes the
+    cursor back to the input field.
 
     A short press on a field character goes into edit mode. In this mode
     rotating the encoder cycles the character at that position. When the
     desired character is reached, pressing enter leaves edit mode, locking the
     change.
 
-    A short press on either of the buttons, activates the button.
+    A short press on either of the buttons activates that button.
 
-    The OK button will call the setter function if supplied, and then exit by
+    The ``OK`` button will call the setter function if supplied, and then exit by
     passing focus to the next screen (usually back to the parent).
     The signature for the callback is:
+
+    .. python::
 
         def callback(value, field_id)
 
     NOTES:
-        * The ``value`` field will a ``bytearray`` type.
+        * The ``value`` field will a ``bytearray`` type representing the field data.
         * The ``field_id`` is the same optional id passed in on `__init__`.
 
-    The Cancel button will just exit by passing focus. A long press is also a
+    The ``Cancel`` button will just exit by passing focus. A long press is also a
     Cancel operation.
     """
 
@@ -93,9 +107,9 @@ class FieldEdit(Screen):
         name: str,
         px_w: int,
         px_h: int,
-        val: int,
-        max_len: int,
-        f_type: str,
+        val: int | None = None,
+        max_len: int = 0,
+        f_type: str = "num",
         setter: callable = None,
         field_id: int = None,
     ):
@@ -104,10 +118,13 @@ class FieldEdit(Screen):
 
         Args:
             name: As for base Screen, but will also be used as field label
-            px_w, px_h: See Screen.__init__.
-            val: The current value, if any for the field
-            max_len: The max number of characters
-            f_type: The field type. One of the keys in F_TYPES
+            px_w, px_h: See `Screen.__init__`.
+            val: The current value, if any for the field. If not supplied it
+                defaults to the empty string.
+            max_len: The max number of characters. If not supplied, or 0, it
+                defaults to max character width of the display (`Screen._max_cols`)
+            f_type: The field type. One of the keys in `F_TYPES`, defaults to
+                ``"num"``
             setter: A function to call when OK is pressed to set the new value.
                 The setter only accepts the new value as argument.
             field_id: Can be used by the callback setter to identify the field
@@ -120,17 +137,16 @@ class FieldEdit(Screen):
         # We use the screen Name for the field label
         super().__init__(name, px_w, px_h)
 
-        # Sanity: Max display characters length
-        self._max_d_len = px_w // self.FONT_W
-
-        # Limit the field length to the maximum display characters length
-        self._max_len = min(max_len, self._max_d_len)
-        # Limit the field field value to the max_len
-        self._val = bytearray(str(val)[: self._max_len] if not None else "", "ascii")
+        # Set the max length to the full display with if 0, else limit to the
+        # maximum display characters length
+        self._max_len = self._max_cols if max_len == 0 else min(max_len, self._max_cols)
         self.f_type = f_type
         self._char_list = F_TYPES[f_type]
         self._setter = setter
         self._field_id = field_id
+
+        # Set the value
+        self.setVal(val)
 
         # We start in cursor mode
         self._mode = M_CURSOR
@@ -144,7 +160,7 @@ class FieldEdit(Screen):
 
         This will normally we called before moving the cursor to hide it from
         it's current location, and then after it has been moved called again to
-        show it at the new positon.
+        show it at the new position.
 
         The cursor position can either be on any of the characters in the
         field, or on one of the buttons.
@@ -253,6 +269,24 @@ class FieldEdit(Screen):
         self._updateField()
         self._show()
 
+    def setVal(self, val: int | str):
+        """
+        Setter for the default input field value.
+
+        Args:
+            val: The new default value to set for the input field. If it is
+                ``None``, the value will be set to the empty string. If the
+                field length after converted to a string is longer than the max
+                display width, it will be truncated.
+
+        Side Effect:
+            Sets `_val` as a ``bytearray`` converted value of ``val``.
+        """
+        # Limit the field field value to the max_len
+        self._val = bytearray(
+            str(val)[: self._max_len] if val is not None else "", "ascii"
+        )
+
     def setup(self):
         """
         Called to set the screen up for editing on receiving focus.
@@ -311,7 +345,7 @@ class FieldEdit(Screen):
         if self._cursor == -2 and callable(self._setter):
             self._setter(self._val, self._field_id)
         # Return to the caller
-        self.passFocus(None)
+        self._passFocus(None)
 
     def actLong(self):
         """
