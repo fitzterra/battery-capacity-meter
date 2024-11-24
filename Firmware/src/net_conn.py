@@ -9,6 +9,7 @@ which should look like this (and be a valid importable Python module)
     CONNECT = True        # Will refuse to connect if False
     SSID = "ap_ssid"
     PASS = "ap_password"
+    HOSTNAME = "client_hostname" # May be None to not set a hostname
 
 This connection file will be imported and the values defined therein will be
 used by `connect()` to establish the WiFi connection.
@@ -30,8 +31,16 @@ Attributes:
         not importable from ``connection.py``.
     PASS: The password for connecting to the AP. Defaults to the empty string
         if not importable from ``connection.py``.
-    MAX_TRIES: Maximum number of tries to connect to the AP before giving up.
-    IS_CONNECTED: Will be set to True once the network is connected
+    HOSTNAME: The hostname to use on the network. If None, no hostname will be
+        set specifically.
+    LED_PIN: A pin connected to an LED to toggle to indicate the network status.
+
+        If the LED is reverse connected (anode to VCC and pin to LED cathode,
+        meaning 0 on the pin switched the LED on), indicate this by making the
+        pin a negative value. Otherwise, to switch the LED on, the pin will be
+        taken high (expecting the LED cathode to be connected to GND).
+    IS_CONNECTED: Will be set to True/False depending on the current connection
+        status if the `monitor()` task is started.
     TIME_SYNCED: Will be ``False`` initially, and is updated by calling
         `syncTime()`. Will be ``True`` if the time was synced via NTP_.
 
@@ -41,41 +50,44 @@ Attributes:
 import ntptime
 import uasyncio as asyncio
 import network
+from micropython import const
 from lib import ulogging as logger
+from lib.led import LED
+
+# Warning: not very Pythonic :-(
+# We predefine the expected values from the connection.py settings file here
+# with default values, and override them by doing a wildcard import from
+# connection. Only those values defined will overwrite our local defaults.
+CONNECT: bool = False
+SSID: str = ""
+PASS: str = ""
+HOSTNAME: str | None = None
+# This is the default LED pin for an S2 Mini.
+LED_PIN: int = const(15)
 
 try:
     from connection import *  # Wildcard is OK here @pylint: disable=wildcard-import
 except Exception as exc:
     logger.error("Error importing connection details: %s", exc)
-    # Preset to false which we would have brought in from connection.py
-    CONNECT: bool = False
-    SSID: str = ""
-    PASS: str = ""
 
-MAX_TRIES: int = 5
 IS_CONNECTED: bool = False
 TIME_SYNCED: bool = False
 
 
-async def connect():
+def connect():
     """
-    Non-blocking network connector.
+    Connect to network.
 
-    This is an asyncio coro that will attempt to connect the network set by
-    `SSID` and `PASS` if `CONNECT` is ``True``. If `CONNECT` is ``False``, no
-    connection will be attempted.
+    The network config is set by `SSID` and `PASS` if `CONNECT` is ``True``. If
+    `CONNECT` is ``False``, no connection will be attempted.
 
-    If a connection is established, it will set `IS_CONNECTED` to ``True``
+    This function only connects to the network, and it would be a good
     """
     # The CONNECT, SSID and PASS constants will be available, and we're OK with
     # global, so @pylint: disable=used-before-assignment,global-statement
 
-    global IS_CONNECTED
-
-    IS_CONNECTED = False
-
     if not CONNECT:
-        logger.info("Not connecting to network because CONNECT is False.")
+        logger.info("NetConn: Not connecting to network because CONNECT is False.")
         return
 
     # Create a station interface and activate it
@@ -83,32 +95,33 @@ async def connect():
     wlan.active(True)
 
     if wlan.isconnected():
-        logger.info("Already connected: %s", wlan.ifconfig())
-        IS_CONNECTED = True
+        logger.info("NetConn: Already connected: %s", wlan.ifconfig())
         return
 
-    logger.info("Connecting to network...")
-    wlan.connect(SSID, PASS)
-    for n in range(MAX_TRIES):
-        if wlan.isconnected():
-            logger.info("Network connected: %s", wlan.ifconfig())
-            IS_CONNECTED = True
-            return
-        await asyncio.sleep_ms(1000)
-        logger.info("  Waiting to connect: %s", n)
+    # Set the hostname if available
+    if HOSTNAME:
+        logger.info("NetConn: Setting hostname to: %s", HOSTNAME)
+        wlan.config(hostname=HOSTNAME)
 
-    logger.error("Unable to connect to SSID: %s", SSID)
+    logger.info("NetCon: Connecting to network...")
+    wlan.connect(SSID, PASS)
 
 
 def disconnect():
     """
     Disconnects from the network if is is connected.
     """
+    # pylint: disable=global-statement
+
+    global IS_CONNECTED
+
+    IS_CONNECTED = False
+
     # Create a station interface and activate it
     wlan = network.WLAN(network.STA_IF)
     wlan.active(True)
 
-    logger.info("Disconnecting from network...")
+    logger.info("NetDiscon: Disconnecting from network...")
 
     if not wlan.isconnected():
         logger.info("  Not currently connected.")
@@ -142,7 +155,7 @@ def syncTime():
     """
     # pylint: disable=global-statement
 
-    logger.info("Setting date/time via NTP...")
+    logger.info("syncTime: Setting date/time via NTP...")
 
     global TIME_SYNCED
 
@@ -159,35 +172,86 @@ def syncTime():
         logger.error("  Error setting time: %s", exc)
 
 
+async def monitor():
+    """
+    This is an async task that will monitor the network connection.
+
+    Currently it monitors the WLAN connection and then it detects the
+    connection has dropped, it will update `IS_CONNECTED` to ``False`` and
+    switch off the monitor LED.
+
+    When a connection is established, it will again update `IS_CONNECTED` to
+    ``True``, call `syncTime()` and turn the monitor LED on.
+
+    The idea was that this will try to re-establish the connection, but I ran
+    into some issues getting this to work - read on...
+
+    The way I tested was to kick the connection on the router, but I suspect
+    this does a deauth, and may not be representative of a real connection
+    loss.
+
+    On the ESP32 I tested, this puts the WLAN in some state where you can not
+    reconnect - or at least not with everything I tried like forcing a
+    disconnect, deactivating/reactivating the interface, etc. It seems the
+    ESP32 when in this state will wait around 60 seconds and then reconnect
+    automatically.
+
+    Other issues where the AP goes away, or the signal is not good may result
+    in different states of the ESP32 WLAN interface, but that is too much of an
+    effort to test at the moment.
+    """
+    # pylint: disable=global-statement
+
+    global IS_CONNECTED
+
+    if not CONNECT:
+        logger.info("NetMon: Not starting connection monitor because CONNECT is False")
+        return
+
+    mon_led = LED(LED_PIN)
+    mon_led.off()
+
+    # Create a local dict of the various STAT_ constants from network in order
+    # to report the status names.
+    stat_names = {getattr(network, n): n for n in dir(network) if n.startswith("STAT_")}
+
+    wlan = network.WLAN(network.STA_IF)
+
+    while True:
+        status = wlan.status()
+        if status != network.STAT_GOT_IP:
+            logger.info(
+                "NetMon: Not connected. Status: %s", stat_names.get(status, status)
+            )
+            if IS_CONNECTED:
+                IS_CONNECTED = False
+                mon_led.off()
+        else:
+            if not IS_CONNECTED:
+                IS_CONNECTED = True
+                logger.info("NetMon: Connection is up: %s", wlan.ifconfig())
+                syncTime()
+                mon_led.on()
+
+        await asyncio.sleep_ms(1000)
+
+
 def _test():
     """
     Function for testing `connect()`.
 
-    Just import it and execute it. It will start an asyncio task to monitor
-    `IS_CONNECTED` and also start a task to run `connect()`. Output and
-    progress is logged.
+    Just import it and execute it.
+
+    It will try to connect and then start the monitor to log network status.
     """
 
-    async def waitForConn():
-        """
-        Waits for the connection to become live
-        """
-
-        logger.info("Gonna wait for connection....")
-        for _ in range(20):
-            logger.info("Connection is up: %s", IS_CONNECTED)
-            if IS_CONNECTED:
-                return
-            logger.info("Sleeping a bit while waiting")
-            await asyncio.sleep_ms(700)
-
-        logger.info("No connection was established.")
+    connect()
 
     async def runEm():
         """
         Nike
         """
-        await asyncio.gather(waitForConn(), connect())
+        await asyncio.gather(monitor())
 
     logger.info("Starting tasks...")
     asyncio.run(runEm())

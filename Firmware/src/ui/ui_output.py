@@ -234,13 +234,16 @@ class Screen:
             Any word that is longer than the available width will be wrapped on
             the last available character on the line, for as many lines as is
             needed or until we run out of display lines.
+
+            Without wrapping, and text longer than the available display space
+            on the given line will be chopped off.
         * ``(^, <, >)``: Alignment specifier.
             These specify possible alignment of center (``^``), left (``<``) or
             right (``>``). If there are multiple of these in ``fmt``, the first
-            one found will be used, of if not given, right alignment will be the
-            default.
+            one found will be used, of if not given, left alignment (``<``)
+            will be the default.
 
-        Note:
+        Warning:
             **No validation** is done on the args. If you use invalid values,
             you will have a hard time debugging possibly weird issues - you
             have been warned.
@@ -387,7 +390,13 @@ class Screen:
         """
         self._display.show()
 
-    def _clear(self, color: int = 0, show: bool = False, header_lns: int = 0):
+    def _clear(
+        self,
+        color: int = 0,
+        show: bool = False,
+        header_lns: int = 0,
+        footer_lns: int = 0,
+    ):
         """
         Convenience function to clear the screen.
 
@@ -396,19 +405,31 @@ class Screen:
             show: If True, then the display will be updated to show the change.
                 If False, the default, then the caller will have to do so.
             header_lns: If not 0, then this is the number of headers lines that
-                show be left in tact and not cleared.
+                should be left in tact and not cleared.
+            footer_lns: If not 0, then this  is the number of footer lines that
+                should be left in tact and not cleared.
         """
         # If there is no header, we can simply use the fill() method which
         # fills the full screen.
         if not header_lns:
             self._display.fill(color)
         else:
+            lines_to_clear = self._max_rows - header_lns - footer_lns
+            if lines_to_clear == 0:
+                # Nothing to clear, get out
+                return
+            if lines_to_clear < 0:
+                logging.error(
+                    "Screen %s: _clear - can not clear %s number of lines",
+                    self.name,
+                    lines_to_clear,
+                )
             # We need to use the rect method todo the clearing
             self._display.rect(
                 0,  # From x==0
                 header_lns * self.FONT_H,  # Skip the header lines
                 self.px_w,  # The full width in pixels
-                self.px_h - self.FONT_H,  # The full heigh minus one character line
+                self.FONT_H * lines_to_clear,  # Only this number of lines
                 color,  # Fill color
                 True,  # Fill the rectangle
             )

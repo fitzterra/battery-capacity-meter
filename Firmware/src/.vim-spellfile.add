@@ -90,3 +90,17 @@ dch
 submenu
 txt
 NTP
+hostname
+SSID
+py
+syncTime
+wildcard
+ap
+ssid
+FieldEdit
+batID
+noFlash
+gpin
+inv
+GPIO
+GPIO0

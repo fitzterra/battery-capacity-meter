@@ -96,6 +96,11 @@ def genBatteryID(last_id: int = 0):
             (battery ID string as above, new ``last_id`` value)
     """
     new_id = last_id + 1
-    date = "".join(str(p) for p in time.localtime()[:3])
+    # We are only interested in the 1st three parts, year, month, day from
+    # localtime.
+    # We set the formatting here to 2 digits with leading zero. This will make
+    # 1 digit day and month values leading zero 2 digits, but since year is
+    # already 4 digits, it will not be truncated or changed.
+    date = "".join(f"{p:02d}" for p in time.localtime()[:3])
 
     return (f"{date}{new_id:03d}", new_id)
