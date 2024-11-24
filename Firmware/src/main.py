@@ -7,8 +7,10 @@ import select
 import utime as time
 import uasyncio as asyncio
 from config import i2c, B0, B1, B2, B3
+from lib import ulogging as logger
 from lib.charge_controller import BatteryController
 from screens import uiSetup
+from net_conn import disconnect, connect, monitor
 
 
 async def showState(ch_ctl: BatteryController):
@@ -36,7 +38,10 @@ async def showState(ch_ctl: BatteryController):
     poller = select.poll()
     poller.register(sys.stdin, select.POLLIN)
 
-    header = "| State | Ch | DCh | Bat V | VJump | Ch C | CJump | Dch C | DcJump | MonT | ID        |"
+    header = (
+        "| State | Ch | DCh | Bat V | VJump | Ch C | CJump "
+        "| Dch C | DcJump | MonT | ID         |"
+    )
     show_header = 10
 
     while True:
@@ -88,11 +93,19 @@ async def showState(ch_ctl: BatteryController):
             + f"|{int(state['dch_c']):>5}mA"
             + f"| {state['dc_jump']:7}"
             + f"| {state['mon_t']:5}"
-            + f"| {state['bat_id']}"
+            + f"| {str(state['bat_id']):>11}"
             + "|"
         )
         show_header += 1
 
+
+# Disconnect and then reconnect the network
+try:
+    disconnect()
+    time.sleep_ms(500)
+    connect()
+except Exception as exc:
+    logger.error("Error connecting to network: %s", exc)
 
 # Set up the charge controller and screens
 ch_ctls = [BatteryController(i2c, bat_cfg) for bat_cfg in (B0, B1, B2, B3)]
@@ -101,4 +114,5 @@ uiSetup(ch_ctls)
 # get the asyncio loop and run forever
 loop = asyncio.get_event_loop()
 loop.create_task(showState(ch_ctls[0]))
+loop.create_task(monitor())
 loop.run_forever()

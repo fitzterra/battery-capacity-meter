@@ -77,7 +77,8 @@ ignored-modules=uos,
                 map_to,
                 ujson,
                 gc,
-                ssd1306
+                ssd1306,
+                ntptime
 
 # Python code to execute, usually for sys.path manipulation such as
 # pygtk.require().

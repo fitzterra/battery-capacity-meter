@@ -546,6 +546,8 @@ class BatteryController:
             See `JUMP_THRESHOLDS` for more...
         * What else?????
         """
+        # TODO: Complete docs
+
         logger.info("%s: Starting async monitor for: %s", self._me, self.cfg.name)
 
         # Instantiate an ADS1115 instance. We will be updating the address for
@@ -855,7 +857,7 @@ class BatteryController:
 
         * If the current `state` is `ST_YANKED`, we change the `state` to
           `ST_UNKNOWN` and also reset any monitor and/or jump flags. The
-          `_updateState()` methods that gets called regularly from `monitor()`
+          `_updateState()` method that gets called regularly from `monitor()`
           will not update the state while we are in `ST_YANKED` state.
         * Reset any monitors found in the list
         * Reset any jump indicators found in the list, optionally setting a
@@ -868,9 +870,9 @@ class BatteryController:
             monitors: As noted above, or ``None`` (the default) to reset all
                 monitors.
             jump_settle: For any of the jump flags, this value can be used to
-                set settle delay for the jump detection. See `checkForJump` for
-                more info. This must be a negative value or None for no settle
-                delay
+                set settle delay for the jump detection. See code for the
+                ``checkForJump()`` sub-function inside `monitor()` for more info.
+                This must be a negative value or ``None`` for no settle delay.
         """
         # Reset the battery yanked state
         if self.state == self.ST_YANKED:
