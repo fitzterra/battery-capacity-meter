@@ -497,6 +497,20 @@ class BCMView(Screen):
         self._bat_id_cnt: int = 0
         self._foot_menu: FootMenu | None = None
 
+    def _passFocus(self, screen: "Screen" | None, return_to_me: bool = False):
+        """
+        Overrides the base method so we can do some house keeping on loosing
+        focus.
+
+        Tasks we do currently:
+            * Reset `_foot_menu` to None to ensure we have no loose hanging
+                menu on screen that is not in focus anymore. The various update
+                flows will ensure to recreate this menu again when needed after
+                we receive focus again.
+        """
+        self._foot_menu = None
+        super()._passFocus(screen, return_to_me)
+
     def _showHeader(self):
         """
         Shows the current BCM name as a header at the top of the screen
@@ -632,8 +646,71 @@ class BCMView(Screen):
         status = self.bci.status()
 
         # Show the current battery voltage
-        bv = f"BV: {int(status['bat_v']):>{self._max_cols-6}d}mv"
+        bv = f"BV: {int(status['bat_v']):>{self._max_cols-6}d}mV"
         self.text(bv, fmt="", y=3)
+
+        self._show()
+
+    def _stChargeDisCharge(self):
+        """
+        Handles updating the screen when the `bci` ``state`` is
+        `BatteryController.ST_CHARGING` or `BatteryController.ST_DISCHARGING`.
+
+        Here we will display the current battery voltage, charge/discharge
+        current and charge and time.
+
+        A `FootMenu` will be available to allow stopping the charge/discharge,
+        or exit the screen.
+        """
+        # Are we charging?
+        charging = self.bci.charge()
+
+        # We clear only the active bit of the screen, leaving the header,
+        # battery ID, and footer menu if it is already there.
+        self._clear(header_lns=2, footer_lns=2)
+
+        # Have we created the footer menu yet?
+        if self._foot_menu is None:
+            logging.info(
+                "Creating and showing footer menu for ST_CHARGING/ST_DISCHARGING state."
+            )
+            # Create the footer menu, and draw it
+            self._foot_menu = FootMenu(
+                self,
+                [
+                    ("Stop", f"Stop {'Charge' if charging else 'Discharge'}"),
+                    ("Exit", "Exit Screen"),
+                ],
+                self.footMenuCB,
+            )
+            self._foot_menu.drawMenu()
+
+        # Get the current status
+        status = self.bci.status()
+
+        # We show discharging with negative values and charging with positive
+        # values. This is only to make it easier to distinguish between the
+        # charge and discharge views.
+        multiplier = 1 if charging else -1
+
+        # Show the current battery voltage
+        ln = f"BV: {int(status['bat_v']):>{self._max_cols-6}d}mV"
+        self.text(ln, fmt="", y=2)
+
+        val = int(status["ch_c" if charging else "dch_c"]) * multiplier
+        ln = f"A: {val:>{self._max_cols-5}d}mA"
+        self.text(ln, fmt="", y=3)
+
+        val = int(status["ch" if charging else "dch"]) * multiplier
+        ln = f"CH: {val:>{self._max_cols-7}d}mAh"
+        self.text(ln, fmt="", y=4)
+
+        secs = int(status["ch_t" if charging else "dch_t"])
+        mins, secs = divmod(secs, 60)
+        hrs, mins = divmod(mins, 60)
+        val = f"{hrs:02d}H{mins:02d}:{secs:02d}"
+        ln = f"T: {val:>{self._max_cols-3}}"
+        self.text(ln, fmt="", y=5)
 
         self._show()
 
@@ -656,6 +733,10 @@ class BCMView(Screen):
 
         if state == BatteryController.ST_BATINS:
             self._stBatIns()
+            return
+
+        if state in (BatteryController.ST_CHARGING, BatteryController.ST_DISCHARGING):
+            self._stChargeDisCharge()
             return
 
         # Clear the screen, leaving the header in tact.
@@ -764,6 +845,12 @@ class BCMView(Screen):
         elif opt == "Dch":
             # Switch discharging on
             self.bci.discharge(True)
+        elif opt == "Stop":
+            # Stop charging/dischargin
+            if self.bci.charge():
+                self.bci.charge(False)
+            else:
+                self.bci.discharge(False)
         else:
             logging.info("Received invalid option from footer menu: %s", opt)
 

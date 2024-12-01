@@ -488,13 +488,13 @@ class BatteryController:
             # If the battery/output voltage is > 2000mV we assume a battery
             # is present.
             # A battery at a voltage lower than this we are not interested
-            # in since it is probably good for the dump anyway.
+            # in it since it is probably good for the dump anyway.
             if self.cfg.v_mon.mon.v > 2000:
-                # If the previous state was not ST_BATINS, a battery was just
+                # If the previous state was ST_NOBAT, a battery was just
                 # inserted now, so we reset the battery ID too
-                if self.state != self.ST_BATINS:
+                if self.state == self.ST_NOBAT:
                     logger.info(
-                        "%s - %s: Seems we just got a battery inserted. Resetting battery ID",
+                        "%s - %s: A battery was inserted. Resetting battery ID",
                         self._me,
                         self.cfg.name,
                     )
@@ -921,16 +921,14 @@ class BatteryController:
             self._jump_flags[metric] = [jump_settle, False]
             logger.info("   Jump flag %s (%s) has been reset..", mon, metric)
 
-    def status(self) -> dict:
+    def status(self, secs: bool = True) -> dict:
         """
         Returns the current status for this battery controller.
 
         If any of the arguments are invalid, an error is logged and the request
         is ignored.
 
-        Returns;
-            If any args errors, an error is logged and None is returned, else a
-            dictionary as:
+        The current status for all monitors will be returned in a dict as:
 
             .. python::
 
@@ -941,16 +939,28 @@ class BatteryController:
                     'v_jump': bool,# True if a large battery voltage jump was detected
                     'state': int,  # One of ST_??? class constants
                     'ch': float    # Last charge value measured in mAh
-                    'ch_t': int    # Last charge period in seconds
+                    'ch_t': int    # Last charge period in seconds or mills - see `secs` arg
                     'ch_c': int    # Last charge current in mA
                     'c_jump': bool,# True if a large charge current jump was detected
                     'dch': float   # Last discharge value measured in mAh
-                    'dch_t': int   # Last discharge period in seconds
+                    'dch_t': int   # Last discharge period in seconds or mills - see `secs` arg
                     'dch_c': int   # Last discharge current in mA
                     'dc_jump': bool,# True if a large discharge current jump was detected
                     'mon_t': int,  # Time in ms for the last monitor loop
                     'bat_id': str|None, # The current `bat_id` value
                 }
+
+        The status values are read from the `BatteryControllerCFG` in `cfg`.
+
+        Args:
+            secs: If True (default) then the charge/discharge total time
+                (``ch_t`` and ``dch_t``) will be returned as rounded seconds.
+                Else it would be returned as milliseconds.
+
+        Returns:
+            If any args errors, an error is logged and None is returned, else a
+            dictionary as shown above.
+
         """
         logger.debug("%s.status: Getting status for %s ...", self._me, self.cfg.name)
 
@@ -960,6 +970,18 @@ class BatteryController:
         dch_s = self.cfg.pin_dch.value()
         bat_v = self.cfg.v_mon.mon.v
 
+        # Do we need to convert to seconds?
+        ch_t = (
+            round(self.cfg.ch_mon.mon.tot_time / 1000)
+            if secs
+            else self.cfg.ch_mon.mon.tot_time
+        )
+        dch_t = (
+            round(self.cfg.dch_mon.mon.tot_time / 1000)
+            if secs
+            else self.cfg.dch_mon.mon.tot_time
+        )
+
         status = {
             "ch_s": ch_s,
             "dch_s": dch_s,
@@ -967,11 +989,11 @@ class BatteryController:
             "v_jump": self._jump_flags["bat_v"][1],
             "state": self.state,
             "ch": self.cfg.ch_mon.mon.mAh,
-            "ch_t": self.cfg.ch_mon.mon.tot_time,
+            "ch_t": ch_t,
             "ch_c": self.cfg.ch_mon.mon.c,
             "c_jump": self._jump_flags["ch_c"][1],
             "dch": self.cfg.dch_mon.mon.mAh,
-            "dch_t": self.cfg.dch_mon.mon.tot_time,
+            "dch_t": dch_t,
             "dch_c": self.cfg.dch_mon.mon.c,
             "dc_jump": self._jump_flags["dch_c"][1],
             "mon_t": self._mon_time,
