@@ -99,6 +99,10 @@ async def showState(ch_ctl: BatteryController):
         show_header += 1
 
 
+# Set up the charge controller and screens
+ch_ctls = [BatteryController(i2c, bat_cfg) for bat_cfg in (B0, B1, B2, B3)]
+uiSetup(ch_ctls)
+
 # Disconnect and then reconnect the network
 try:
     disconnect()
@@ -106,10 +110,6 @@ try:
     connect()
 except Exception as exc:
     logger.error("Error connecting to network: %s", exc)
-
-# Set up the charge controller and screens
-ch_ctls = [BatteryController(i2c, bat_cfg) for bat_cfg in (B0, B1, B2, B3)]
-uiSetup(ch_ctls)
 
 # get the asyncio loop and run forever
 loop = asyncio.get_event_loop()
