@@ -4,6 +4,10 @@
 	(generator_version "8.0")
 	(uuid "d838ee05-8219-4637-8a5b-7a554bf6dff8")
 	(paper "A4")
+	(title_block
+		(title "Battery Capacity Meter II")
+		(rev "v0.1")
+	)
 	(lib_symbols
 		(symbol "ADC_Modules:ADS1115_BO"
 			(exclude_from_sim no)

@@ -92,6 +92,7 @@ flash_bin: $(MPBIN)
 ####
 MPY_SRC = boot.py \
 		  main.py \
+		  i2c_config.py \
 		  config.py \
 		  structures.py \
 		  net_conn.py \
@@ -107,7 +108,8 @@ MPY_SRC = boot.py \
 		  lib/utils.py \
 		  lib/uencoder.py \
 		  lib/ubutton.py \
-		  lib/charge_controller.py \
+		  lib/adc_monitor.py \
+		  lib/bat_controller.py \
 		  screens.py \
 		  version.py \
 		  #mqtt.py \
@@ -299,4 +301,16 @@ build_micropython:
 # been installed, and also a fully configured pydoctor.ini or similar config
 # file for pydoctor
 docs:
-	pydoctor
+	@# First determine remote gitlab url from the git remote,
+	@# and also the current branch. This is used to set the
+	@# source URL for the docs
+	@remote_url=$$(git config --get remote.origin.url) && \
+	branch_name=$$(git branch --show-current) && \
+	if [[ $$remote_url == git@* ]]; then \
+	  remote_url=$$(echo "$$remote_url" | sed -e 's/:/\//' -e 's/^git@/http:\/\//'); \
+	fi && \
+	if [[ $$remote_url == *.git ]]; then \
+	  remote_url=$${remote_url%.git}; \
+	fi && \
+	html_url="$$remote_url/blob/$$branch_name/Firmware/src" && \
+	pydoctor --project-url "$$remote_url" --html-viewsource-base "$$html_url" --template-dir=./pydoctor_templates
