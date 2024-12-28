@@ -1,0 +1,5 @@
+/* Make field tables alternate color between rows so as to make it easier where
+ * one field description starts and ends. */
+table.fieldTable tr:nth-child(even) {
+     background-color: #f4f4f4;
+}
