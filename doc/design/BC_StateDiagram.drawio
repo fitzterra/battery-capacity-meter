@@ -61,8 +61,8 @@
         <mxCell id="HQNFl6fORtpmSnsVz54U-28" value="Dch Stop" style="align=center;spacingLeft=4;dashed=1;strokeColor=#666666;rounded=1;" vertex="1" parent="1">
           <mxGeometry x="866" y="900" width="57" height="25" as="geometry" />
         </mxCell>
-        <mxCell id="HQNFl6fORtpmSnsVz54U-31" value="Dch Stop" style="align=center;spacingLeft=4;dashed=1;strokeColor=#666666;rounded=1;" vertex="1" parent="1">
-          <mxGeometry x="1148.5" y="634" width="54" height="23" as="geometry" />
+        <mxCell id="HQNFl6fORtpmSnsVz54U-31" value="V_Mon Reset&#xa;Dch Stop" style="align=center;spacingLeft=4;dashed=1;strokeColor=#666666;rounded=1;" vertex="1" parent="1">
+          <mxGeometry x="1134.25" y="622" width="82.5" height="37" as="geometry" />
         </mxCell>
         <mxCell id="HQNFl6fORtpmSnsVz54U-32" value="Battery removed" style="rounded=1;arcSize=20;strokeWidth=2;fillColor=#AA4444;strokeColor=#770000;fontStyle=1;fontColor=#FFFFFF;" vertex="1" parent="1">
           <mxGeometry x="785" y="1120" width="109" height="35" as="geometry" />

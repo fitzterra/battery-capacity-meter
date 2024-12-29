@@ -62,6 +62,7 @@ stateDiagram-v2
     end note
     DISCHARGED: Disharge Completed
     note right of DISCHARGED
+        V_Mon Reset
         Dch Stop
     end note
     YANKED: Battery removed

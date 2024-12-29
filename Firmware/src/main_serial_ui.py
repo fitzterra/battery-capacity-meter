@@ -11,6 +11,7 @@ import uasyncio as asyncio
 from lib.utils import stdinKeyMonitor
 from lib.bat_controller import BatteryController
 from lib import ulogging as logging
+from state_broadcast import broadcast
 
 from config import HARDWARE_CFG
 
@@ -54,6 +55,9 @@ class BCSerialUI:
         self.active_bc = 0
         # A shortcut to self.bcs[self.active_bc] - set by setActive
         self.bc = None
+
+        # If True, the output will be paused
+        self.pause = False
 
         self.setActive(0)
 
@@ -134,6 +138,15 @@ class BCSerialUI:
                 self.bc.resetMetrics()
             return
 
+        # Pause toggle with 'o' or space
+        if ch in ("o", " "):
+            # Toggle output pause
+            self.pause = not self.pause
+
+            if self.pause:
+                self.output("Output paused...")
+            return
+
         print(f"Invalid input: {ch}")
 
     async def statusMonitor(self):
@@ -170,6 +183,9 @@ class BCSerialUI:
         # We run all the time
         while True:
             await asyncio.sleep_ms(update_delay)
+
+            if self.pause:
+                continue
 
             if header_cnt == 0:
                 self.output("\x1B[4m" + header + "\x1B[0m")
@@ -224,6 +240,7 @@ def main():
 
     loop = asyncio.get_event_loop()
     loop.set_exception_handler(asyncIOExeption)
+    loop.create_task(broadcast(bat_ctls))
     loop.run_forever()
 
 

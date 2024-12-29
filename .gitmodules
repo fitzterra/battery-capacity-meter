@@ -16,3 +16,6 @@
 [submodule "Firmware/submodules/micropython-stubs"]
 	path = Firmware/submodules/micropython-stubs
 	url = https://github.com/Josverl/micropython-stubs.git
+[submodule "Firmware/submodules/micropython-mqtt"]
+	path = Firmware/submodules/micropython-mqtt
+	url = https://github.com/peterhinch/micropython-mqtt.git
