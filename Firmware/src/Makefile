@@ -96,6 +96,7 @@ MPY_SRC = boot.py \
 		  config.py \
 		  structures.py \
 		  net_conn.py \
+		  state_broadcast.py \
 		  ui/__init__.py \
 		  ui/ui_input.py \
 		  ui/ui_output.py \
@@ -110,10 +111,9 @@ MPY_SRC = boot.py \
 		  lib/ubutton.py \
 		  lib/adc_monitor.py \
 		  lib/bat_controller.py \
+		  lib/mqtt_as.py \
 		  screens.py \
 		  version.py \
-		  #mqtt.py \
-		  #interface.py \
 
 # The expected .mpy files for each .py above
 MPYS = $(patsubst %.py,%.mpy,$(wildcard $(MPY_SRC)))

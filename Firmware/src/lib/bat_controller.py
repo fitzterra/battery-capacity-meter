@@ -53,7 +53,7 @@ class StateMachine:
 
     State Diagram:
 
-    .. image:: ../../doc/design/BC_StateMachine.drawio.png
+    .. image:: ../../doc/design/BC_StateDiagram.drawio.png
 
     See:
         [../../doc/design/BC_StateMachine.md] for MermaidJS_ source for this
@@ -537,8 +537,36 @@ class BatteryController(StateMachine):
         # As soon as get a new ID for a newly inserted battery, we reset all
         # old monitors.
         if self.state == self.S_BAT_ID:
+            # See below why we save the current battery voltage.
+            v_orig = self.bat_v
+
             self._resetMonitors()
-            # Nothing to fail here ,so we return True
+            # We may also get here when a very flat battery is discharged. The
+            # DW01 on the TP4056 disconnects the battery at around 2.4 volt
+            # during discharge, and keeps it disconnected until the battery
+            # voltage gets back to about 3.0V. For a battery with a very low
+            # charge this may not happen, or could take very long to happen,
+            # and we are then stuck in the S_DISCHARGED state. An
+            # E_reset_metrics event from that state will bring us here, because
+            # it is assumed the battery has now recovered to above the over
+            # discharge voltage.
+            # If however the voltage at this point is lower than D_VOLTAGE_TH,
+            # then it makes no sense to say we have a battery in the holder.
+            # In this case, we simulated a yanked battery to get to a yanked
+            # state.
+            # Note that the reset above would have reset the battery voltage by
+            # the time we get here to test, so we use the saved battery voltage
+            # from before the reset.
+            if v_orig < D_VOLTAGE_TH:
+                logging.info(
+                    "%s: Battery voltage too low (%smV) for this state. "
+                    "Simulating a yank event.",
+                    self._bc_prefix,
+                    v_orig,
+                )
+                return self.transition(self.E_v_drop)
+
+            # Nothing failed here ,so we return True
             return True
 
         # When we transitioned to charging, we need to switch the controller on
@@ -560,6 +588,14 @@ class BatteryController(StateMachine):
         # When we transitioned to discharging paused or completed, we need to
         # switch the controller off
         if self.state in (self.S_DISCHARGE_PAUSE, self.S_DISCHARGED):
+            if self.S_DISCHARGED:
+                # When discharged, the battery would effectively have been
+                # disconnected by the DW01 on the TP4056 board. This means that the
+                # last voltage seen by the v_mon was higher than our V_SPIKE_TH,
+                # and the next v_mon spike detection will take us straight to the
+                # yanked state which we do not want. To avoid this, we reset the
+                # v_mon here.
+                self._v_mon.reset()
             return self._cdControl(state=False, dch=True)
 
         # Was the battery yanked?
@@ -775,8 +811,9 @@ class BatteryController(StateMachine):
             v_to,
             self._bat_v_track,
         )
-        # Did we reach the end of charge?
+        # Did we reach the end of discharge?
         if self._bat_v_track < D_VOLTAGE_TH:
+            # Now we try transition to discharged state
             if not self.transition(self.E_dch_done):
                 logging.error(
                     "%s: Unable to transition to fully discharged.",
@@ -949,6 +986,13 @@ class BatteryController(StateMachine):
             The battery voltage in mV.
         """
         return self._v_mon.voltage
+
+    @property
+    def bat_id(self) -> int:
+        """
+        Property to return the current battery ID.
+        """
+        return self._bat_id
 
     @property
     def charge_vals(self) -> tuple:

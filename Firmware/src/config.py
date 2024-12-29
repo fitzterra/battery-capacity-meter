@@ -327,4 +327,4 @@ D_SPIKE_TH_T = 600
 C_VOLTAGE_TH = 4180
 # The battery voltage threshold at which we determine that discharge is
 # completed.
-D_VOLTAGE_TH = 2550
+D_VOLTAGE_TH = 2600
