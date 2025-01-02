@@ -131,3 +131,6 @@ controllerFactory
 stdout
 MOSFET
 mon
+SoC
+hardcoded
+creds
