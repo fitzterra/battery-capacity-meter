@@ -93,10 +93,10 @@ flash_bin: $(MPBIN)
 MPY_SRC = boot.py \
 		  main.py \
 		  sitelocal_conf.py \
+		  net_conf.py \
 		  i2c_config.py \
 		  config.py \
 		  structures.py \
-		  net_conn.py \
 		  state_broadcast.py \
 		  ui/__init__.py \
 		  ui/ui_input.py \

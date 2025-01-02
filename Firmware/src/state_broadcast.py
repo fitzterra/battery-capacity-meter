@@ -2,16 +2,25 @@
 Battery status and progress broadcasting module.
 
 This module provides support for monitoring one or more BatteryController
-instances and publishing regular progress messages via MQTT.
+instances and publishing regular progress messages via MQTT_.
 
-It also has the basic framework in place for receiving commands via MQTT should
+It also has the basic framework in place for receiving commands via MQTT_ should
 this be needed in future.
 
-Important:
+It uses the **Peter Hinch's** `Asynchronous MQTT`_ module which also handles
+the Wifi connection.
+
+MQTT Connection Config
+----------------------
+
+The MQTT server and connection details are contained in the `net_conf`, and it's
+site local equivalent, module.
+
+Warning:
     Need to complete docs here.
 
-    Especially mention how connect.py is used here and what the requires for it
-    is.
+.. _MQTT: https://en.wikipedia.org/wiki/MQTT
+.. _`Asynchronous MQTT`: https://github.com/peterhinch/micropython-mqtt
 """
 
 import json
@@ -20,13 +29,7 @@ import uasyncio as asyncio
 from lib import ulogging as logging
 from lib.mqtt_as import MQTTClient, config
 from lib.bat_controller import BatteryController
-
-try:
-    import connection as conn_params
-except Exception as exc:
-    logging.error("Error importing connection parameters: %s", exc)
-    conn_params = None  # This is OK @pylint: disable=invalid-name
-
+import net_conf
 
 # This is the main BCM control topic. We will subscribe to this main and all
 # it's sub-topics.
@@ -119,18 +122,17 @@ def buildMsg(bc: BatteryController) -> dict:
 
 async def broadcast(bcs: list[BatteryController,]):
     """
-    Function continue check the BCs to monitor and broadcast current status via
-    MQTT
+    Function continue sly checks the BCs to monitor and broadcast current status via
+    MQTT...
+
+    Warning:
+        Docs needs to be completed...
     """
 
-    if conn_params is None:
-        logging.error("Can not broadcast status info: no connection params found.")
-        return
-
     # Configuration
-    config["ssid"] = conn_params.SSID
-    config["wifi_pw"] = conn_params.PASS
-    config["server"] = conn_params.MQTT_HOST
+    config["ssid"] = net_conf.SSID
+    config["wifi_pw"] = net_conf.PASS
+    config["server"] = net_conf.MQTT_HOST
     config["queue_len"] = 1  # Use event interface with default queue size
     MQTTClient.DEBUG = True  # Optional: print diagnostic messages
 

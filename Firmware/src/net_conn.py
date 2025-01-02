@@ -1,40 +1,23 @@
 """
-Handles network connection.
+Module to connect and handle network connections if not using the `Asynchronous
+MQTT`_ module.
 
-The network connection details are defined in a file called ``connection.py``
-which should look like this (and be a valid importable Python module)
+Note:
+    The `state_broadcast` module uses `Asynchronous MQTT`_ for broadcasting
+    battery status and will thus use the `mqtt_as` module for both handling the
+    network connection as well as the MQTT connection.
+    This means that this module will not be used in production, but is still
+    kept in the code base if simple networking testing or such may be needed.
 
-.. python::
-
-    CONNECT = True        # Will refuse to connect if False
-    SSID = "ap_ssid"
-    PASS = "ap_password"
-    HOSTNAME = "client_hostname" # May be None to not set a hostname
-
-This connection file will be imported and the values defined therein will be
-used by `connect()` to establish the WiFi connection.
-If the file is not found, or importing it results in an error, the defaults for
-its expected values will be set as described below.
-
-This file is not versioned in the project repo and is expected to be installed
-per device, or the application should be able to create and update this file
-via some UI.
+The network access credentials are defined in thew `net_conf` module, and it's
+site local settings.
 
 This module also provides the `syncTime()` function to set the local date/time
 via NTP_
 
 Attributes:
     CONNECT: Connection control. If ``False``, a `connect()` will not try to
-        connect to the network. Will be imported from ``connection.py``, and
-        default to ``False`` if this import fails.
-    SSID: The SSID for the AP to connect to. Defaults to the empty string if
-        not importable from ``connection.py``.
-    PASS: The password for connecting to the AP. Defaults to the empty string
-        if not importable from ``connection.py``.
-    HOSTNAME: The hostname to use on the network. If None, no hostname will be
-        set specifically.
     LED_PIN: A pin connected to an LED to toggle to indicate the network status.
-
         If the LED is reverse connected (anode to VCC and pin to LED cathode,
         meaning 0 on the pin switched the LED on), indicate this by making the
         pin a negative value. Otherwise, to switch the LED on, the pin will be
@@ -44,6 +27,7 @@ Attributes:
     TIME_SYNCED: Will be ``False`` initially, and is updated by calling
         `syncTime()`. Will be ``True`` if the time was synced via NTP_.
 
+.. _Asynchronous MQTT: https://github.com/peterhinch/micropython-mqtt
 .. _NTP: https://en.wikipedia.org/wiki/Network_Time_Protocol
 """
 
@@ -53,22 +37,15 @@ import network
 from micropython import const
 from lib import ulogging as logger
 from lib.led import LED
+import net_conf
 
 # Warning: not very Pythonic :-(
 # We predefine the expected values from the connection.py settings file here
 # with default values, and override them by doing a wildcard import from
 # connection. Only those values defined will overwrite our local defaults.
 CONNECT: bool = False
-SSID: str = ""
-PASS: str = ""
-HOSTNAME: str | None = None
 # This is the default LED pin for an S2 Mini.
 LED_PIN: int = const(15)
-
-try:
-    from connection import *  # Wildcard is OK here @pylint: disable=wildcard-import
-except Exception as exc:
-    logger.error("Error importing connection details: %s", exc)
 
 IS_CONNECTED: bool = False
 TIME_SYNCED: bool = False
@@ -78,14 +55,11 @@ def connect():
     """
     Connect to network.
 
-    The network config is set by `SSID` and `PASS` if `CONNECT` is ``True``. If
+    The network config is set by `net_conf.SSID` and `net_conf.PASS` if `CONNECT` is ``True``. If
     `CONNECT` is ``False``, no connection will be attempted.
 
     This function only connects to the network, and it would be a good
     """
-    # The CONNECT, SSID and PASS constants will be available, and we're OK with
-    # global, so @pylint: disable=used-before-assignment,global-statement
-
     if not CONNECT:
         logger.info("NetConn: Not connecting to network because CONNECT is False.")
         return
@@ -99,12 +73,12 @@ def connect():
         return
 
     # Set the hostname if available
-    if HOSTNAME:
-        logger.info("NetConn: Setting hostname to: %s", HOSTNAME)
-        wlan.config(hostname=HOSTNAME)
+    if net_conf.HOSTNAME:
+        logger.info("NetConn: Setting hostname to: %s", net_conf.HOSTNAME)
+        wlan.config(hostname=net_conf.HOSTNAME)
 
     logger.info("NetCon: Connecting to network...")
-    wlan.connect(SSID, PASS)
+    wlan.connect(net_conf.SSID, net_conf.PASS)
 
 
 def disconnect():
