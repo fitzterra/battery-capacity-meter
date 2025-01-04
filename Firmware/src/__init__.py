@@ -74,10 +74,10 @@ tedious process for a human to monitor and record.
 Automating this process was the primary design goal for the BCM².
 
 The `state_broadcast` part of the BCM² firmware monitors the status of the
-`battery controller` all the time. When certain events like battery inserted,
+`BatteryController` all the time. When certain events like battery inserted,
 battery removed, battery ID set, charging, discharging, cycle complete etc.
 happens, it will send a status message via MQTT_ on a specific topic
-(`state_broadcast.PUB_TOPIC`).
+(`net_conf.MQTT_PUB_TOPIC`).
 
 From this it is then possible to record these messages into a database and by
 processing the information from there, one can build a history and status for

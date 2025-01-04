@@ -134,3 +134,10 @@ mon
 SoC
 hardcoded
 creds
+mqtt
+MQTTClient
+conf
+github
+async
+FootMenu
+vals

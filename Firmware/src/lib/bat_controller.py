@@ -60,6 +60,10 @@ class StateMachine:
         FSM
 
     Attributes:
+
+        name: A name for the controller set on `__init__`
+
+        S_DISABLED: Statue: Battery controller disabled due to missing ADCs
         S_NOBAT: Status: No Battery
         S_BAT_NOID: Status: Battery, No ID
         S_GET_ID: Status: Input Bat ID
@@ -72,22 +76,42 @@ class StateMachine:
         S_DISCHARGED: Status: Disharge Completed
         S_YANKED: Status: Battery removed
 
-        E_v_jump: Event: > +2V change in battery voltage in 300ms
-        E_v_drop: Event: > -2V change in battery voltage in 500ms (this rate is slower)
-        E_ch_jump: Event: > +200mA change in charge current in 100ms
-        E_ch_drop: Event: > -200mA change in charge current in 100ms
-        E_dch_jump: Event: > +200mA change in discharge current in 100ms
-        E_dch_drop: Event: > -200mA change in discharge current in 100ms
-        E_ch_done: Event: ?? Not sure how to know charge is completed yet
-        E_dch_done: Event: ?? Not sure how to know discharge is completed yet
-        E_ch_on: Event: Charge switched on
-        E_ch_off: Event: Charge switched off
-        E_dch_on: Event: Discharge switched on
-        E_dch_off: Event: Discharge switched off
+        STATE_NAME: Human readable names for each of the above states.
+
+            Used by the `state_name` method to return the string name for a
+            given state.
+
+
+        E_disable: Event: Disables this controller and FSM.
+        E_init: Event: Initializes the FSM.
+        E_v_jump: Event: A `_voltageSpike` with rising voltage was detected.
+        E_v_drop: Event: A `_voltageSpike` with falling voltage was detected.
+        E_ch_jump: Event: A `_chargeSpike` with rising current was detected.
+        E_ch_drop: Event: A `_chargeSpike` with falling current was detected.
+        E_dch_jump: Event: A `_dischargeSpike` with rising current was detected.
+        E_dch_drop: Event: A `_dischargeSpike` with falling current was detected.
+        E_ch_done: Event: Charging is done.
+
+            When a `_chargeSpike` is detected and the `_bat_v_track` voltage is
+            greater than `C_VOLTAGE_TH`
+
+        E_dch_done: Event: Discharging is done.
+
+            When a `_dischargeSpike` is detected and the `_bat_v_track` voltage
+            is less than `D_VOLTAGE_TH`
+
+
+        E_charge: Event: Start charging. Called to switch on MOSFET on success
+        E_discharge: Event: Start discharging. Called to switch on MOSFET on success
+        E_pause: Event: Pause Charge or Discharge. Called to switch MOSFET on success
+        E_resume: Event: Resume Charge or Discharge. Called to switch MOSFET on success
         E_reset: Event: Resets monitor after yank
         E_get_id: Event: Event to indicate weare getting user input for the ID
         E_set_id: Event: ID input complete and battery ID has been set.
         E_reset_metrics: Event: Resets the metrics for a battery after halting charge/dischare
+
+        EVENT_NAME: A dictionary of event constants above as keys, and their
+            equivalent human readable event names as values.
 
         TRANSITIONS: Describes the allowed transitions.
 
@@ -104,29 +128,33 @@ class StateMachine:
         state: This will be the current state as defined by the various
             ``S_???`` constants.
 
+            See:
+                `STATE_NAME` for a list of the states.
+
     .. _`Finite State Machine`: https://en.wikipedia.org/wiki/Finite-state_machine
     .. _MermaidJS: https://mermaid.js.org/
     """
 
     # Possible states - excluding the unknown state with value of None
-    S_DISABLED = const(0)  # Battery controller disabled due to missing ADCs
-    S_NOBAT = const(1)  # No Battery
-    S_BAT_NOID = const(2)  # Battery, No ID
-    S_GET_ID = const(3)  # Input Bat ID
-    S_BAT_ID = const(4)  # Battery + ID
-    S_CHARGE = const(5)  # Charging
-    S_DISCHARGE = const(6)  # Discharging
-    S_CHARGE_PAUSE = const(7)  # Charging Paused
-    S_DISCHARGE_PAUSE = const(8)  # Disharging Paused
-    S_CHARGED = const(9)  # Charge completed
-    S_DISCHARGED = const(10)  # Disharge Completed
-    S_YANKED = const(11)  # Battery removed
+    # See Attributes docs in docstring
+    S_DISABLED = const(0)
+    S_NOBAT = const(1)
+    S_BAT_NOID = const(2)
+    S_GET_ID = const(3)
+    S_BAT_ID = const(4)
+    S_CHARGE = const(5)
+    S_DISCHARGE = const(6)
+    S_CHARGE_PAUSE = const(7)
+    S_DISCHARGE_PAUSE = const(8)
+    S_CHARGED = const(9)
+    S_DISCHARGED = const(10)
+    S_YANKED = const(11)
 
     # State names that should be in the same order as the state definitions
     # above. The state name is used as index into this list.
     # NOTE: This excludes the unknown (None) state because I like to complicate
     #       shit!
-    STATE_NAME = [
+    STATE_NAME: list = [
         "Disabled",  # S_DISABLED
         "No Battery",  # S_NOBAT
         "Battery, No ID",  # S_BAT_NOID
@@ -141,50 +169,45 @@ class StateMachine:
         "Yanked",  # S_YANKED
     ]
 
-    # Possible events
-    E_disable = const(100)  # FSM disabled
-    E_init = const(101)  # FSM initialize event
-    E_v_jump = const(102)  # > +2V change in battery voltage in 300ms
-    # > -2V change in battery voltage in 500ms (this rate is slower)
+    # Possible events. See Attributes in docstring for documentation.
+    E_disable = const(100)
+    E_init = const(101)
+    E_v_jump = const(102)
     E_v_drop = const(103)
-    E_ch_jump = const(104)  # > +200mA change in charge current in 100ms
-    E_ch_drop = const(105)  # > -200mA change in charge current in 100ms
-    E_dch_jump = const(106)  # > +200mA change in discharge current in 100ms
-    E_dch_drop = const(107)  # > -200mA change in discharge current in 100ms
-    E_ch_done = const(108)  # ?? Not sure how to know charge is completed yet
-    E_dch_done = const(109)  # ?? Not sure how to know discharge is completed yet
-    E_charge = const(110)  # Start charging. Caller to switch on MOSFET on success
-    E_discharge = const(111)  # Start discharging. Caller to switch on MOSFET on success
-    # Pause Charge or Discharge. Caller to switch MOSFET on success
+    E_ch_jump = const(104)
+    E_ch_drop = const(105)
+    E_dch_jump = const(106)
+    E_dch_drop = const(107)
+    E_ch_done = const(108)
+    E_dch_done = const(109)
+    E_charge = const(110)
+    E_discharge = const(111)
     E_pause = const(112)
-    # Resume Charge or Discharge. Caller to switch MOSFET on success
     E_resume = const(113)
-    E_reset = const(114)  # Resets monitor after yank
-    E_get_id = const(115)  # Event to indicate weather getting user input for the ID
-    E_set_id = const(116)  # ID input complete and battery ID has been set.
-    # Resets the metrics for a battery after halting charge/discharge
+    E_reset = const(114)
+    E_get_id = const(115)
+    E_set_id = const(116)
     E_reset_metrics = const(117)
 
-    # Event ID names
-    EVENT_NAME = {
-        E_disable: "E_disable",  # FSM disabled
-        E_init: "E_init",  # FSM initialize event
-        E_v_jump: "E_v_jump",  # > +2V change in battery voltage in 300ms
-        E_v_drop: "E_v_drop",  # > -2V change in battery voltage in 500ms (this rate is slower)
-        E_ch_jump: "E_ch_jump",  # > +200mA change in charge current in 100ms
-        E_ch_drop: "E_ch_drop",  # > -200mA change in charge current in 100ms
-        E_dch_jump: "E_dch_jump",  # > +200mA change in discharge current in 100ms
-        E_dch_drop: "E_dch_drop",  # > -200mA change in discharge current in 100ms
-        E_ch_done: "E_ch_done",  # ?? Not sure how to know charge is completed yet
-        E_dch_done: "E_dch_done",  # ?? Not sure how to know discharge is completed yet
-        E_charge: "E_charge",  # Start charging. Caller to switch on MOSFET on success
-        E_discharge: "E_discharge",  # Start discharging. Caller to switch on MOSFET on success
-        E_pause: "E_pause",  # Pause Charge or Discharge. Caller to switch MOSFET on success
-        E_resume: "E_resume",  # Resume Charge or Discharge. Caller to switch MOSFET on success
-        E_reset: "E_reset",  # Resets monitor after yank
-        E_get_id: "E_get_id",  # Event to indicate weather getting user input for the ID
-        E_set_id: "E_set_id",  # ID input complete and battery ID has been set.
-        # Resets the metrics for a battery after halting charge/discharge
+    # Event ID names. See Attributes in docstring for documentation
+    EVENT_NAME: dict = {
+        E_disable: "E_disable",
+        E_init: "E_init",
+        E_v_jump: "E_v_jump",
+        E_v_drop: "E_v_drop",
+        E_ch_jump: "E_ch_jump",
+        E_ch_drop: "E_ch_drop",
+        E_dch_jump: "E_dch_jump",
+        E_dch_drop: "E_dch_drop",
+        E_ch_done: "E_ch_done",
+        E_dch_done: "E_dch_done",
+        E_charge: "E_charge",
+        E_discharge: "E_discharge",
+        E_pause: "E_pause",
+        E_resume: "E_resume",
+        E_reset: "E_reset",
+        E_get_id: "E_get_id",
+        E_set_id: "E_set_id",
         E_reset_metrics: "E_reset_metrics",
     }
 
@@ -281,13 +304,13 @@ class StateMachine:
             name: A name for this FSM. Usually linked to the what???
 
         Attributes:
-            _name: The battery controller name passes in to `__init__` as the
+            name: The battery controller name passes in to `__init__` as the
             ``name`` arg.
 
         TODO:
              Complete docs
         """
-        self._name: str = name
+        self.name: str = name
         # We start off in the unknown state, and need to be initialized or
         # disabled ASAP.
         self.state: int | None = None
@@ -299,7 +322,7 @@ class StateMachine:
         Returns:
             The FSM name.
         """
-        return self._name
+        return self.name
 
     @property
     def state_name(self) -> str:
@@ -367,15 +390,41 @@ class BatteryController(StateMachine):
         * A `ChargeMonitor` that monitors the discharge current and amount of
           change for a given charge cycle - `_dch_mon`.
 
-
     On instantiation, the monitor task (`ADCMonitor._monitor`) for each of the
     three ADC monitors will be created, but the charge/discharge monitors will
     both be paused, while only the voltage monitor will be running.
 
     Both charge and discharge switches will also be set off.
 
+    As the three monitors described above sees changes in voltage or current,
+    they will call back to internal functions (`_voltageSpike`, `_chargeSpike`,
+    `_dischargeSpike`) which will then make a `transition()` call for the type
+    of change event detected. This may change the controller state if the event
+    is valid.
+
+    Other external interfaces allows for other state changes - see `setID`,
+    `charge`, `discharge`, `pause`, `resume`, `resetMetrics` and `reset` for
+    more details.
+
+    The current controller state can be checked by various other attributes and
+    methods: `state`, `bat_v`, `bat_id`, `charge_vals`, `discharge_vals`.
+
     Attributes:
 
+        _bc_prefix: Used as logging prefix to distinguish log messages by
+            `BatteryController`
+        _pin_ch: Charge control pin
+        _pin_dch: Discharge control pin
+        _bat_id: This will be the ID given to the battery currently being
+            monitored by this controller.
+        _v_mon: A `VoltageMonitor` as described above to monitor the battery
+            voltage.
+        _ch_mon: A `ChargeMonitor` as described above to monitor battery
+            charging.
+        _dch_mon: A `ChargeMonitor` as described above to monitor battery
+            discharging.
+        _bat_v_track: Tracks the last few battery voltage readings to help
+            detect fully charge/discharged states.
     """
 
     # Do not worry @pylint: disable=too-many-instance-attributes
@@ -407,7 +456,7 @@ class BatteryController(StateMachine):
 
         Note that asyncio monitor task for each of the monitors that are not
         disabled would also have been started, and will start running as soon
-        as scheduler starts running.
+        as the asyncio scheduler starts running.
 
         Args:
             name: The controller name from `HARDWARE_CFG`
@@ -425,17 +474,14 @@ class BatteryController(StateMachine):
         super().__init__(name)
 
         # Used for logging
-        self._bc_prefix = f"{self._name} (BC)"
+        self._bc_prefix: str = f"{self.name} (BC)"
 
         # The charge and discharge control pins
-        self._pin_ch = Pin(ch_cfg[0], Pin.OUT, value=0)  # Charge control pin
-        self._pin_dch = Pin(dch_cfg[0], Pin.OUT, value=0)  # Discharge control pin
+        self._pin_ch: Pin = Pin(ch_cfg[0], Pin.OUT, value=0)  # Charge control pin
+        self._pin_dch: Pin = Pin(dch_cfg[0], Pin.OUT, value=0)  # Discharge control pin
 
         # This will be the ID given to the battery currently in the holder.
         self._bat_id: str = ""
-        # This a counter that the _genID() method will increment every time it
-        # auto generates a new ID
-        self._bat_cnt = 1
 
         # Create a Battery voltage monitor instance
         self._v_mon = VoltageMonitor(
@@ -481,7 +527,7 @@ class BatteryController(StateMachine):
 
         # Tracks the last few battery voltage readings to help detect fully
         # charge/discharged states
-        self._bat_v_track = 0
+        self._bat_v_track: int = 0
 
         # And start the battery voltage tracker
         asyncio.create_task(self._trackBatV())

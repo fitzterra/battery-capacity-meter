@@ -1,5 +1,5 @@
 """
-All screen and UI related definitions.
+All screen and UI related functionality.
 
 Attributes:
     Q1: Bit definition for drawing an ellipse_ in quadrant 1, top right
@@ -13,10 +13,11 @@ Attributes:
 
 import gc
 from micropython import const
+from machine import Pin
 from ssd1306 import SSD1306_I2C
 from lib import ulogging as logging
 from lib.utils import genBatteryID
-from lib.charge_controller import BatteryController
+from lib.bat_controller import BatteryController
 from ui import (
     Screen,
     setupEncoder,
@@ -25,7 +26,6 @@ from ui import (
     FieldEdit,
 )
 from config import (
-    Pin,
     i2c,
     ENC_CLK,
     ENC_DT,
@@ -441,61 +441,85 @@ class BCMView(Screen):
     """
     Views and controls Battery Capacity Meter modules.
 
+    This screen will be used to monitor and control all available
+    `BatteryController` instances.
+
+    One instance is active at any time and a **long press** is used to cycling
+    between the available instances.
+
+    The screen will update as the underlying `BatteryController.state` changes.
+    For example when no battery is inserted, the screen will show a message to
+    this effect, then when the battery is inserted it will update to ask for
+    the battery ID to be entered, and after that it will allow the battery to be
+    tested, charged, discharged, etc. via a footer menu.
+
+    Cycling between `BatteryController` instances leaves the non-visible
+    controllers to continue where they were when they were active. On
+    activating a controller it will just continue where it left off, or more
+    precisely, display the current controller state.
+
+    The screen can be exited by the ``Exit`` option on any footer menu, or by a
+    single click if no footer menu is available.
+
+    Some sample screens:
+
+    .. image:: ../../Firmware/ScreenDesign/OLED128x64_BatIns_State_larger.gif
+
+    Animated footer menu with a battery inserted in the controller with the name
+    **BC0**
+
+    .. image:: ../../Firmware/ScreenDesign/OLED128x64_Charge_State_large.gif
+
+    Animation of the charge in progress screen.
+
+    .. image:: ../../Firmware/ScreenDesign/OLED128x64_Disharge_Complete_larger.png
+
+    The screen when charging is complete.
+
     Attributes:
 
-        bci: Set from the ``bci`` arg to `__init__` as a `BatteryController`
-            instance.
+        AUTO_REFRESH: Overrides the base `Screen.AUTO_REFRESH` for delay
+            between screen updated for this `Screen`
 
-        _bat_id_cnt: Counter to be used to make unique battery IDs.
+        _bcms: List of `BatteryController` instances to manage. This is from
+            the ``bcms`` arg to `__init__`
 
-            Gets incremented every time we change a battery. Used when calling
-            `genBatteryID` and updated from the return value.
+        _active_bcm: Index into `_bcms` of the active BCM being viewed.
 
-        bat_id_input: A `FieldEdit` input screen to set the Battery ID.
+        _bc: The current active `BatteryController` being managed.
 
-            This screen will get focus when it is detected that a battery was
-            inserted but the `bci` does not have a battery ID
-            (`BatteryController.bat_id`) set.
-
-            A default ID will be generated using `genBatteryID()` and the user
-            will be able to modify this if this is for a Battery that already
-            has an ID for example. Once ``OK`` is selected on this screen, the
-            setter, `_setBatID` will be called to update the battery ID for
-            `bci`.
+            This is a convenience access to ``self._bcms[self._active_bcm]``
+            and is set by calls to `_activateBCM()`
 
         _foot_menu: Will be a `FootMenu` instance or None.
 
-            When a battery has been inserted a `FootMenu` is dynamically defined in the
-            `_stBatIns()` and assigned to this instance variable. This will
-            allow selecting to start charging or discharging on that view.
+            The footer menu is dynamically defined depending on the screen
+            we're on. It allows actions and navigation per screen.
 
-            Another dynamic `FootMenu` will be defined when we are currently
-            charging or discharing. This will be to either stop the current
-            activity or exit the screen to go to another BCMView.
+        _last_state: Holds the last `BatteryController.state` for `_bc`.
 
-            If we are not in any of these states, this variable will be
-            ``None`` to indicate no footer menu is currently active.
+            This is used in the `update` method to detect if there was a state
+            change from the last to the current screen update.
 
-            When active, the `actCCW()`, `actCW()` and `actShort()` encoder
-            event methods will call the respective methods as needed on this
-            instance.
     """
 
     # The auto refresh rate
     AUTO_REFRESH = 500
 
-    def __init__(self, name: str, px_w: int, px_h: int, bci: BatteryController):
+    def __init__(self, name: str, px_w: int, px_h: int, bcms: list[BatteryController]):
         """
         Overrides base init.
 
         Args:
             name, px_w, px_h:  See `Screen` base class documentation.
-            bci: `BatteryController` instance to control and monitor.
+            bcms: List of `BatteryController` instance to control and monitor.
         """
         super().__init__(name, px_w, px_h)
-        self.bci: BatteryController = bci
-        self._bat_id_cnt: int = 0
+        self._bcms: list[BatteryController] = bcms
+        self._active_bcm: int | None = None
+        self._bc: BatteryController | None = None
         self._foot_menu: FootMenu | None = None
+        self._last_state: int = -1
 
     def _passFocus(self, screen: "Screen" | None, return_to_me: bool = False):
         """
@@ -513,69 +537,93 @@ class BCMView(Screen):
 
     def _showHeader(self):
         """
-        Shows the current BCM name as a header at the top of the screen
+        Shows the current `BatteryController.name` as a header at the top of
+        the screen and the battery ID if available.
+
+        This header is show inverted.
         """
-        header = f"{self.name:^{self._max_cols}}"
+        header = f"{self._bc.name:^{self._max_cols}}"
         self._display.text(header, 0, 0, 1)
         self._invertText(0, 0)
 
-    def _setBatID(self, val, _):
-        """
-        Called to set the ID for the currently inserted battery.
-
-        This is the `FieldEdit._setter` callback for the `bat_id_input` screen.
-        We do not use the ``field_id`` for this field entry screen and thus has
-        this args set as ``_``.
-        """
-        self.bci.bat_id = val.decode("utf-8")
-        logging.info("Screen %s: Setting battery ID to: %s", self.name, self.bci.bat_id)
-
-    def setup(self):
-        """
-        Override Screen setup for BatCapMeter modules.
-        """
-        self._clear()
-        self._showHeader()
-
-        # If there are missing ADCs (only while developing really), we just
-        # show a message. We do not start auto refresh task either.
-        if self.bci.state == self.bci.ST_NOADC:
-            msg = ["Missing ADC", "modules.", "", "Press to exit."]
-            for l, m in enumerate(msg, 3):
-                self._display.text(f"{m:^{self._max_cols}s}", 0, l * self.FONT_H, 1)
-            logging.info("Unusable BCM %s - Missing ADC modules.", self.name)
-            self._show()
-            return
-
         # Show the battery ID if we have one
-        if self.bci.bat_id:
+        if self._bc.bat_id:
             label = "B_ID:"
             id_w = self._max_cols - len(label)
             self._display.text(
-                f"{label}{self.bci.bat_id:>{id_w}.{id_w}}", 0, 1 * self.FONT_H, 1
+                f"{label}{self._bc.bat_id:>{id_w}.{id_w}}", 0, 1 * self.FONT_H, 1
             )
+
+    def _activateBCM(self, idx: int | str):
+        """
+        Called to change the view to a new BCM in the list of `_bcms` we manage.
+
+        Args:
+            idx: An index into `_bcms` for the one to select and make active.
+                To make it easier cycle through the available BCMs, this can
+                also be the characters '>' or '<' to mean select next or
+                previous BCM respectively.
+        """
+        # Validate idx
+        if idx in ("<", ">"):
+            idx = self._active_bcm + (-1 if idx == "<" else 1)
+            # Wrap around?
+            if idx < 0:
+                idx = len(self._bcms) - 1
+            elif idx >= len(self._bcms):
+                idx = 0
+
+        if not isinstance(idx, int):
+            logging.error("Screen %s: invalid bcm index to set: %s", self.name, idx)
+            return
+
+        # Make it active
+        self._active_bcm = idx
+        self._bc = self._bcms[self._active_bcm]
+
+        # Set up the screen.
+        self._clear()
+        self._showHeader()
+
+        self._show()
+
+    def setup(self):
+        """
+        Override `Screen.setup` so we can do some local setup first.
+        """
+        # Only activate the first BCM if we do not already have one that is
+        # active. This is needed when we return from subscreens or from the
+        # parent menu.
+        if self._active_bcm is None:
+            self._activateBCM(0)
+        else:
+            self._clear()
+            self._showHeader()
 
         # Call our base to setup the auto refresher task
         super().setup()
 
-    def _stUnknown(self):
-        """
-        Handles updating the screen for the ST_UNKNOWN state.
+        self._show()
 
-        We only display a message to indicate the state is unknown, and will be
-        updated once it is known again.
+    def _stDisabled(self):
+        """
+        Handles updating the screen for the `BatteryController.S_DISABLED` state.
+
+        We only display a message to indicate that we are disabled.
         """
         # Clear the screen, leaving the header in tact.
         self._clear(header_lns=1)
 
-        self.text(
-            "Unknown battery status. Waiting for it become known...", fmt="w^", y=2
-        )
+        # The .text method does not handle newlines for an open line before
+        # the last line, so we improvise.
+        msg = ["Controller", "disabled.", "", "Press to exit."]
+        for l, m in enumerate(msg, 3):
+            self._display.text(f"{m:^{self._max_cols}s}", 0, l * self.FONT_H, 1)
         self._show()
 
     def _stNoBat(self):
         """
-        Handles updating the screen for the ST_NOBAT state.
+        Handles updating the screen for the `BatteryController.S_NOBAT` state.
 
         We only display a message to indicate that we are waiting for a battery
         to be inserted.
@@ -586,50 +634,73 @@ class BCMView(Screen):
         self.text("Waiting for battery to be inserted...", fmt="w^", y=2)
         self._show()
 
-    def _stBatIns(self):
+    def _setBatID(self, val: bytearray, _):
         """
-        Handles updating the screen when the `bci` ``state`` is
-        `BatteryController.ST_BATINS`.
+        Callback for the `FieldEdit` screen set up in `_stGetID` to enter
+        or update the battery ID.
 
-        On this screen, if we do not yet have a battery ID (``bat_id`` from
-        `bci`) for the currently inserted battery, then we first create a
-        `FieldEdit` screen to get the battery ID, and then pass focus to this
-        screen.
-
-        This screen will callback to `_setBatID()` to set the battery ID. Once
-        this is done and a battery ID is available, we will display the current
-        battery voltage and show a `FootMenu` to allow selecting to charge or
-        discharge the battery, or exit the screen.
+        Args:
+            val: The final ID value
+            _: Ignored field ID received from caller.
         """
-        # We do not have a battery ID yet. Deal with that first.
-        if self.bci.bat_id is None:
-            # Generate a new battery ID, using our counter value, and update
-            # the counter value from the result.
-            b_id, self._bat_id_cnt = genBatteryID(self._bat_id_cnt)
-            # Create a new FieldEdit screen to enter the battery ID
-            bat_id_input = FieldEdit(
-                "Bat ID",
-                self.px_w,
-                self.px_h,
-                max_len=11,
-                val=b_id,
-                f_type="num",
-                setter=self._setBatID,
+        if self._bc.setID(val.decode("ascii")):
+            logging.info(
+                "Screen %s: Battery ID was set to: %s", self.name, self._bc.bat_id
             )
-            # # Set the new Battery ID, and then pass focus to the Battery ID
-            # # FieldEdit screen in self.bat_id_input
-            # self.bat_id_input.setVal(b_id)
-            self._passFocus(bat_id_input, return_to_me=True)
-            return
+        else:
+            logging.error(
+                "Screen %s: Error setting battery ID.", self.name, self._bc.bat_id
+            )
 
-        # We have the battery ID.
-        # We clear only the active bit of the screen, leaving the header,
-        # battery ID, and footer menu if it is already there.
+    def _stGetID(self):
+        """
+        Handles updating the screen for the `BatteryController.S_GET_ID` state.
+
+        When we get here, the `BatteryController` has already created a default
+        ID for the newly inserted battery, and this state is there to either
+        confirm or change this default ID.
+
+        We dynamically create a `FieldEdit` screen here, passing in the default
+        battery ID for editing.
+
+        The callback for this `FieldEdit` instance is the `_setBatID` method
+        which will then call `BatteryController.setID()` (via `_bc`) method to
+        set the ID and advance to the next state.
+        """
+        # Clear the screen, leaving the header in tact.
+        self._clear(header_lns=1)
+
+        # Create a new FieldEdit screen to enter the battery ID, generating
+        # a new battery ID as the default
+        bat_id_input = FieldEdit(
+            "Bat ID",
+            self.px_w,
+            self.px_h,
+            max_len=10,
+            # The BatteryController would already have generated the new
+            # battery ID as soon as it transitioned to S_GET_ID.
+            val=self._bc.bat_id,
+            f_type="ALnum",
+            setter=self._setBatID,
+        )
+        # Pass focus to the battery ID input screen
+        self._passFocus(bat_id_input, return_to_me=True)
+
+    def _stBatID(self):
+        """
+        Handles updating the screen for the `BatteryController.S_BAT_ID` state.
+
+        This state only maintains an updated battery voltage, and a footer menu
+        to allow for charging, discharging, etc.
+        """
+        # We should have a battery ID displayed already, we clear only the
+        # active bit of the screen, leaving the header, battery ID, and footer
+        # menu if it is already there.
         self._clear(header_lns=2, footer_lns=2)
 
         # Have we created the footer menu yet?
         if self._foot_menu is None:
-            logging.info("Creating and showing footer menu for ST_BATINS state.")
+            logging.info("Creating and showing footer menu for S_BAT_ID state.")
             # Create the footer menu, and draw it
             self._foot_menu = FootMenu(
                 self,
@@ -642,28 +713,49 @@ class BCMView(Screen):
             )
             self._foot_menu.drawMenu()
 
-        # Get the current status
-        status = self.bci.status()
-
         # Show the current battery voltage
-        bv = f"BV: {int(status['bat_v']):>{self._max_cols-6}d}mV"
+        bv = f"BV: {self._bc.bat_v:>{self._max_cols-6}d}mV"
         self.text(bv, fmt="", y=3)
 
         self._show()
 
     def _stChargeDisCharge(self):
         """
-        Handles updating the screen when the `bci` ``state`` is
-        `BatteryController.ST_CHARGING` or `BatteryController.ST_DISCHARGING`.
+        Handles updating the screen while battery is being charge, discharge or
+        in a charge/discharge paused state.
+
+        We will be called for any of these states:
+
+        * `BatteryController.S_CHARGE`
+        * `BatteryController.S_DISCHARGE`
+        * `BatteryController.S_CHARGE_PAUSE`
+        * `BatteryController.S_DISCHARGE_PAUSE`
 
         Here we will display the current battery voltage, charge/discharge
-        current and charge and time.
+        current and charge time. For discharge the current and mAh values are
+        shown as negative values - note this is only for display and to help
+        distinguish between charge/discharge views. The actual values are still
+        positive at the lower level.
 
-        A `FootMenu` will be available to allow stopping the charge/discharge,
-        or exit the screen.
+        When not paused, a `FootMenu` will be available to allow pausing the
+        charge/discharge, or exit the screen.
+
+        When paused, the `FootMenu` will allow resuming, stopping or screen
+        exit.
         """
-        # Are we charging?
-        charging = self.bci.charge()
+        # Determine if we charging or discharging, or in a charge or discharge
+        # paused state
+        if self._bc.state in (
+            BatteryController.S_CHARGE_PAUSE,
+            BatteryController.S_DISCHARGE_PAUSE,
+        ):
+            paused = True
+            # We need to set charging based on the type of pause we're in
+            charging = self._bc.state == BatteryController.S_CHARGE_PAUSE
+        else:
+            paused = False
+            # Set charging based of if we charging or dischaging
+            charging = self._bc.state == BatteryController.S_CHARGE
 
         # We clear only the active bit of the screen, leaving the header,
         # battery ID, and footer menu if it is already there.
@@ -672,21 +764,27 @@ class BCMView(Screen):
         # Have we created the footer menu yet?
         if self._foot_menu is None:
             logging.info(
-                "Creating and showing footer menu for ST_CHARGING/ST_DISCHARGING state."
+                "Creating and showing footer menu for S_CHARGE/S_DISCHARGE state."
             )
-            # Create the footer menu, and draw it
-            self._foot_menu = FootMenu(
-                self,
-                [
-                    ("Stop", f"Stop {'Charge' if charging else 'Discharge'}"),
+            # The footer menu options are different for paused and non-paused
+            # state
+            if not paused:
+                opts = [
+                    ("Pause", f"Pause {'Charge' if charging else 'Discharge'}"),
                     ("Exit", "Exit Screen"),
-                ],
-                self.footMenuCB,
-            )
+                ]
+            else:
+                opts = [
+                    ("Cont", f"Resume {'Charge' if charging else 'Discharge'}"),
+                    ("Stop", f"Stop {'Charging' if charging else 'Discharging'}"),
+                    ("Exit", "Exit Screen"),
+                ]
+            # Create and show the footer menu
+            self._foot_menu = FootMenu(self, opts, self.footMenuCB)
             self._foot_menu.drawMenu()
 
         # Get the current status
-        status = self.bci.status()
+        vals = self._bc.charge_vals if charging else self._bc.discharge_vals
 
         # We show discharging with negative values and charging with positive
         # values. This is only to make it easier to distinguish between the
@@ -694,19 +792,21 @@ class BCMView(Screen):
         multiplier = 1 if charging else -1
 
         # Show the current battery voltage
-        ln = f"BV: {int(status['bat_v']):>{self._max_cols-6}d}mV"
+        ln = f"BV: {self._bc.bat_v:>{self._max_cols-6}d}mV"
         self.text(ln, fmt="", y=2)
 
-        val = int(status["ch_c" if charging else "dch_c"]) * multiplier
+        # The current is the 3rd element in the vals tuple
+        val = vals[2] * multiplier
         ln = f"A: {val:>{self._max_cols-5}d}mA"
         self.text(ln, fmt="", y=3)
 
-        val = int(status["ch" if charging else "dch"]) * multiplier
+        # The mAh is the 5th element in the vals tuple
+        val = vals[4] * multiplier
         ln = f"CH: {val:>{self._max_cols-7}d}mAh"
         self.text(ln, fmt="", y=4)
 
-        secs = int(status["ch_t" if charging else "dch_t"])
-        mins, secs = divmod(secs, 60)
+        # The time is the last element in vals
+        mins, secs = divmod(vals[-1], 60)
         hrs, mins = divmod(mins, 60)
         val = f"{hrs:02d}H{mins:02d}:{secs:02d}"
         ln = f"T: {val:>{self._max_cols-3}}"
@@ -714,29 +814,161 @@ class BCMView(Screen):
 
         self._show()
 
+    def _stComplete(self):
+        """
+        Handles updating the screen when the battery has been fully charged or
+        discharged.
+
+        The display will indicate the charge/discharge is completed, and will
+        show the total **mAh** charge for the cycle, as will as the time it
+        took to reach this state.
+
+        A `FootMenu` will be available to allow resetting the controller and
+        metrics or exit the screen.
+        """
+        # Determine if we are charged or discharged
+        # Set charging based of if we charging or discharging
+        charged = self._bc.state == BatteryController.S_CHARGED
+
+        # We clear only the active bit of the screen, leaving the header,
+        # battery ID, and footer menu if it is already there.
+        self._clear(header_lns=2, footer_lns=2)
+
+        # Have we created the footer menu yet?
+        if self._foot_menu is None:
+            logging.info(
+                "Creating and showing footer menu for S_CHARGED/S_DISCHARGED state."
+            )
+            # Create the footer menu, and draw it
+            self._foot_menu = FootMenu(
+                self,
+                [
+                    ("Reset", "Reset Metrics"),
+                    ("Exit", "Exit Screen"),
+                ],
+                self.footMenuCB,
+            )
+
+            self._foot_menu.drawMenu()
+
+        # Complete message
+        self.text(f"{'Charge' if charged else 'Discharge'} Done", "^", x=0, y=2)
+        self._invertText(0, 2)
+
+        # Get the current status
+        vals = self._bc.charge_vals if charged else self._bc.discharge_vals
+
+        # The mAh is the 5th element in the vals tuple
+        mah = vals[4]
+        # The time is the last element in vals
+        mins, secs = divmod(vals[-1], 60)
+        hrs, mins = divmod(mins, 60)
+        tm = f"{hrs:02d}H{mins:02d}:{secs:02d}"
+
+        # Show the total charge and time
+        self.text(f"{mah}mAh/{tm}", fmt="^", y=4)
+
+        # Show the current battery voltage
+        ln = f"BV: {self._bc.bat_v:>{self._max_cols-6}d}mV"
+        self.text(ln, fmt="", y=5)
+
+        self._show()
+
+    def _stYanked(self):
+        """
+        Handles updating the screen for the `BatteryController.S_YANKED` state.
+
+        It will show a message to indicate that the battery was removed anda
+        `FootMenu` to allow resetting the controller or exiting the screen.
+        """
+        # Clear the screen, leaving the header and footer menu in tact.
+        self._clear(header_lns=1, footer_lns=2)
+
+        # Have we created the footer menu yet?
+        if self._foot_menu is None:
+            logging.info("Creating and showing footer menu for S_YANKED state.")
+            # Create the footer menu, and draw it
+            self._foot_menu = FootMenu(
+                self,
+                [
+                    ("Reset", "Reset Controller"),
+                    ("Exit", "Exit Screen"),
+                ],
+                self.footMenuCB,
+            )
+            self._foot_menu.drawMenu()
+
+        self.text("Battery removed.", fmt="w^", y=3)
+        self._show()
+
     def update(self):
         """
-        Updates the display.
-        """
-        # Get the current status
-        state = self.bci.state
+        Display update handler.
 
-        # If the status is Unknown, we do not know what to do
-        if state == BatteryController.ST_UNKNOWN:
-            self._stUnknown()
+        Called after every `AUTO_REFRESH` delay to update the screen.
+
+        This method will simply determine the current battery state, whether
+        there was a state change from the previous to current call, and then
+        call the correct handler to manage the display for the given state.
+        """
+        # We have a lot of flow here, so @pylint: disable=too-many-return-statements
+
+        # If we do not have an active BCM set yet, we just return
+        if self._active_bcm is None:
+            return
+
+        # Get the current status
+        state = self._bc.state
+        # Very weird syntax, but this sets state_changed True is the new state
+        # is not the same as the last state, i.o.w. a state changed happened
+        # since our last call, and then if there was a state change we update
+        # self._last_state to the current state.
+        if state_changed := state != self._last_state:
+            self._last_state = state
+
+        # Disabled?
+        if state == BatteryController.S_DISABLED:
+            self._stDisabled()
             return
 
         # Are we waiting for a battery to be inserted?
-        if state == BatteryController.ST_NOBAT:
+        if state == BatteryController.S_NOBAT:
             self._stNoBat()
             return
 
-        if state == BatteryController.ST_BATINS:
-            self._stBatIns()
+        if state == BatteryController.S_GET_ID:
+            self._stGetID()
             return
 
-        if state in (BatteryController.ST_CHARGING, BatteryController.ST_DISCHARGING):
+        # If we get here, we should have a battery ID already, and it would
+        # have been displayed by our setup after receiving focus back from the
+        # battery ID input FieldEdit screen.
+
+        if state == BatteryController.S_BAT_ID:
+            self._stBatID()
+            return
+
+        if state in (
+            BatteryController.S_CHARGE,
+            BatteryController.S_DISCHARGE,
+            BatteryController.S_CHARGE_PAUSE,
+            BatteryController.S_DISCHARGE_PAUSE,
+        ):
+            if state_changed:
+                self._foot_menu = None
             self._stChargeDisCharge()
+            return
+
+        if state in (BatteryController.S_CHARGED, BatteryController.S_DISCHARGED):
+            if state_changed:
+                self._foot_menu = None
+            self._stComplete()
+            return
+
+        if state == BatteryController.S_YANKED:
+            if state_changed:
+                self._foot_menu = None
+            self._stYanked()
             return
 
         # Clear the screen, leaving the header in tact.
@@ -747,17 +979,27 @@ class BCMView(Screen):
     def menuText(self):
         """
         Allows for dynamically updating the menu screen entry for this BCM to
-        also show current status.
+        also show current active BCM.
 
-        This method will be called by the `Menu` listing all the BCMs every
-        time it needs to render the menu screen. To make it easier for the user
-        to see at a glance what the BCM is doing, we can return a string of
-        what we want to show on the menu from here.
+        Our parent `Menu` will call here to allow us to dynamically supply the
+        name to be shown for this screen on the parent menu.
+
+        The name we show is the screen `Screen.name`, and if we have an active
+        BCM already (`_active_bcm` is not ``None``), the name of that BCM in
+        brackets after our screen name.
 
         Returns:
-            A string with this BMC name and a status indicator.
+            A string with this `Menu` entry name out parent menu should use.
         """
-        return f"{self.name} [{self.bci.state}]"
+        # The menu entry will be our name
+        res = f"{self.name}"
+
+        # If we already have an active BCM, we append the name for that BCM to
+        # the menu name to make it clear which one is currently active.
+        if self._active_bcm is not None:
+            res = f"{res} [{self._bc.name}]"
+
+        return res
 
     def actCCW(self):
         """
@@ -804,16 +1046,26 @@ class BCMView(Screen):
         logging.info("Screen %s: Activating selected footer menu option.", self.name)
         self._foot_menu.activate()
 
+    def actLong(self):
+        """
+        Overrides the base long press event.
+
+        We override this so that we can activate the next BCM in the list of
+        available BCMs.
+
+        This will call `_activateBCM()` passing the ID to activate as ``">"`` to
+        activate the next BCM in `_bcms`.
+        """
+        logging.info("Screen %s: Activating next BCM.", self.name)
+        self._foot_menu = None
+        self._activateBCM(">")
+
     def footMenuCB(self, opt: str):
         """
         Footer menu callback function.
 
         This is a callback set for any dynamic `FootMenu` instances we set up
         (see `_foot_menu`) for any running state.
-
-        Currently it only handles the footer menu when
-        charging/discharging/exit can be selected on the view handled by
-        `_stBatIns()`.
 
         When called, `_foot_menu` will be set to ``None`` to effectively
         disable the footer menu since an option has now been selected.
@@ -822,8 +1074,8 @@ class BCMView(Screen):
         a call to `actShort()`, effectively simulating a short press to exit
         the screen.
 
-        For the ``"Ch"`` and ``"Dch"`` options, we start charging or
-        discharging respectively via a call to the appropriate `bci` method.
+        For all other options we call the appropriate handler, sometimes also
+        based on the state. See the code for moredetails.
 
         Args:
             opt: The foot menu option string that was active when the option
@@ -841,16 +1093,25 @@ class BCMView(Screen):
 
         if opt == "Ch":
             # Switch charging on
-            self.bci.charge(True)
+            self._bc.charge()
         elif opt == "Dch":
             # Switch discharging on
-            self.bci.discharge(True)
+            self._bc.discharge()
+        elif opt == "Pause":
+            # Pause charge/dischar
+            self._bc.pause()
+        elif opt == "Cont":
+            # Resume after pause
+            self._bc.resume()
         elif opt == "Stop":
             # Stop charging/dischargin
-            if self.bci.charge():
-                self.bci.charge(False)
+            self._bc.resetMetrics()
+        elif opt == "Reset":
+            if self._bc.state == self._bc.S_YANKED:
+                self._bc.reset()
             else:
-                self.bci.discharge(False)
+                self._bc.resetMetrics()
+
         else:
             logging.info("Received invalid option from footer menu: %s", opt)
 
@@ -864,15 +1125,12 @@ def uiSetup(bcms: list):
 
     It then sets up the following screens and menus:
 
-    * A `BCMView` screen for each of the `BatteryController` instances in the
-        ``bcms`` list.
-    * A `Menu` to list all these `BCMView` s and to open any of them
-    * The main menu which consists of:
-
-        * The BCMs menu
+    * A `BCMView` screen to show the `BatteryController` instances in the
+      ``bcms`` list.
+    * The main `Menu` which consists of:
+        * The `BCMView` entry
         * A `Config` option for future config and setup from the UI
         * An entry for the `MemoryUsage` screen
-
     * The `Boot` Screen.
 
     After all this, it passes focus to the boot screen and sets the main menu
@@ -894,17 +1152,17 @@ def uiSetup(bcms: list):
     # Set up the OLED
     oled = SSD1306_I2C(OLED_W, OLED_H, i2c, OLED_ADDR)
 
-    # Setup the BCMView list menu definition using a generator expression to
-    # create a menu definition tuple
-    bcms_def = tuple(
-        (bcm.cfg.name, BCMView(bcm.cfg.name, OLED_W, OLED_H, bcm)) for bcm in bcms
-    )
-    # Now create the BCM list menu
-    bcm_menu = Menu("BCMs", OLED_W, OLED_H, bcms_def, True)
+    # # Setup the BCMView list menu definition using a generator expression to
+    # # create a menu definition tuple
+    # bcms_def = tuple(
+    #     (bcm.cfg.name, BCMView(bcm.cfg.name, OLED_W, OLED_H, bcm)) for bcm in bcms
+    # )
+    # # Now create the BCM list menu
+    # bcm_menu = Menu("BCMs", OLED_W, OLED_H, bcms_def, True)
 
     # Now we can dynamically create the main menu def
     main_menu_def = (
-        ("BCMs View", bcm_menu),
+        ("BCMs View", BCMView("BCMView", OLED_W, OLED_H, bcms)),
         ("Config", Config("Config", OLED_W, OLED_H)),
         ("Memory usage", MemoryUsage("Memory Usage", OLED_W, OLED_H)),
     )
