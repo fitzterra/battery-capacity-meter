@@ -1,23 +1,22 @@
 """
 Battery status and progress broadcasting module.
 
-This module provides support for monitoring one or more BatteryController
-instances and publishing regular progress messages via MQTT_.
+This module provides support for monitoring one or more `BatteryController`
+instances and publishing regular progress messages via MQTT_ from the
+`broadcast` async task..
+
+It is also responsible for connecting to the network, and MQTT_ server, and for
+monitoring this connection. If the connection to the WiFi or MQTT_ server drops,
+the `MQTTClient` will automatically try to reconnect.
 
 It also has the basic framework in place for receiving commands via MQTT_ should
 this be needed in future.
 
-It uses the **Peter Hinch's** `Asynchronous MQTT`_ module which also handles
-the Wifi connection.
-
-MQTT Connection Config
-----------------------
+It uses **Peter Hinch's** `Asynchronous MQTT`_ module which also handles the
+WiFi connection as mentioned above.
 
 The MQTT server and connection details are contained in the `net_conf`, and it's
-site local equivalent, module.
-
-Warning:
-    Need to complete docs here.
+site local config, module.
 
 .. _MQTT: https://en.wikipedia.org/wiki/MQTT
 .. _`Asynchronous MQTT`: https://github.com/peterhinch/micropython-mqtt
@@ -30,11 +29,6 @@ from lib import ulogging as logging
 from lib.mqtt_as import MQTTClient, config
 from lib.bat_controller import BatteryController
 import net_conf
-
-# This is the main BCM control topic. We will subscribe to this main and all
-# it's sub-topics.
-CTL_TOPIC = "BCM/ctl/#"
-PUB_TOPIC = "BCM/state"
 
 
 async def clientUp(client):
@@ -51,8 +45,10 @@ async def clientUp(client):
         # We need to clear the event to signal that we noticed it.
         client.up.clear()
 
+        logging.info("Network: Connection is up.")
+
         # Subscribe to any topics defined
-        await client.subscribe(CTL_TOPIC, 0)
+        await client.subscribe(net_conf.MQTT_CTL_TOPIC, 0)
 
         # Sync network time
         try:
@@ -61,6 +57,23 @@ async def clientUp(client):
             logging.info("Network: Time synced to pool.ntp.org.")
         except Exception as exc:
             logging.error("Network: Error syncing time: %s", exc)
+
+
+async def clientDown(client):
+    """
+    Task to monitor for when the client connection goes down.
+
+    This only logs a message. The client will auto try to reconnect.
+    """
+    while True:
+        # Pause until outage
+        await client.down.wait()
+        # We need to clear the event to signal that we noticed it.
+        client.down.clear()
+
+        logging.error(
+            "Network: WiFi or broker is down. Auto reconnect will be attempted."
+        )
 
 
 async def messages(client):
@@ -122,35 +135,41 @@ def buildMsg(bc: BatteryController) -> dict:
 
 async def broadcast(bcs: list[BatteryController,]):
     """
-    Function continue sly checks the BCs to monitor and broadcast current status via
-    MQTT...
+    Monitors each `BatteryController` in the ``bcs`` list and broadcasts MQTT
+    messages on status changes and charge/discharge progress.
+
+    In addition to monitoring the BCs, this task also sets up the `MQTTClient`
+    and by extension the WiFi connection, and also connects to the network.
 
     Warning:
         Docs needs to be completed...
     """
 
-    # Configuration
+    # We need access to some protected members of the BatteryController class,
+    # so @pylint: disable=protected-access
+
+    # Network configuration using mqtt_as config structure
     config["ssid"] = net_conf.SSID
     config["wifi_pw"] = net_conf.PASS
     config["server"] = net_conf.MQTT_HOST
     config["queue_len"] = 1  # Use event interface with default queue size
-    MQTTClient.DEBUG = True  # Optional: print diagnostic messages
+    MQTTClient.DEBUG = net_conf.MQTT_DEBUG  # Optional: print diagnostic messages
 
     # Create an MQTTClient instance and wait for it to connect.
     client = MQTTClient(config)
     await client.connect()
 
     # While we wait, we start the event tasks.
-    for task in (clientUp, messages):
+    for task in (clientUp, clientDown, messages):
         asyncio.create_task(task(client))
 
-    stats = {bc._name: {"state": None} for bc in bcs}
+    stats = {bc.name: {"state": None} for bc in bcs}
 
     while True:
         for bc in bcs:
             await asyncio.sleep_ms(250)
 
-            st = stats[bc._name]
+            st = stats[bc.name]
             topic = msg = None
 
             if st["state"] != bc.state or bc.state in [
@@ -159,7 +178,7 @@ async def broadcast(bcs: list[BatteryController,]):
                 bc.S_DISCHARGE,
             ]:
                 st["state"] = bc.state
-                topic = f"{PUB_TOPIC}/{bc._name}"
+                topic = f"{net_conf.MQTT_PUB_TOPIC}/{bc.name}"
                 msg = buildMsg(bc)
 
             if msg:

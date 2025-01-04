@@ -89,6 +89,35 @@ class FieldEdit(Screen):
 
     The ``Cancel`` button will just exit by passing focus. A long press is also a
     Cancel operation.
+
+    Attributes:
+
+        LN_LABEL: Line number on which to show the field label
+        LN_FIELD: Line number on which to show the field
+        LN_BTNS:  Line number on which to show the option buttons.
+        POS_OK: Tuple of (x, y) position for the OK button
+        POS_CANCEL: Tuple of (x, y) position for the CANCEL button
+
+        f_type: The field type set from the ``f_type`` arg to `__init__`.
+
+            This is one of the keys in the `F_TYPES` dictionary.
+
+        _max_len: Calculated maximum field length based on the ``max_len`` arg
+            to `__init__`.
+
+        _char_list: The list of available characters for the field.
+
+            This is from ``F_TYPES[f_type]``.
+
+        _setter: From the ``setter`` arg to `__init__`.
+
+        _field_id: From the ``field_id`` arg to `__init__`
+
+        _val: Holds the field value and updated as each character is updated.
+
+        _mode: Current mode indicator. One of `M_CURSOR` or `M_EDIT`.
+
+        _cursor: X offset for cursor into the field.
     """
 
     # We do need all instance attributes, so @pylint: disable=too-many-instance-attributes
@@ -110,8 +139,8 @@ class FieldEdit(Screen):
         val: int | None = None,
         max_len: int = 0,
         f_type: str = "num",
-        setter: callable = None,
-        field_id: int = None,
+        setter: callable | None = None,
+        field_id: int | None = None,
     ):
         """
         Overrides base init to add additional init args.
@@ -132,18 +161,22 @@ class FieldEdit(Screen):
                 multiple fields. Will be passed as the last arg to the setter
                 callback.
         """
-        # We need all these args, so @pylint: disable=too-many-arguments
+        # We need all these args, so
+        # @pylint: disable=too-many-arguments,too-many-positional-arguments
 
         # We use the screen Name for the field label
         super().__init__(name, px_w, px_h)
 
         # Set the max length to the full display with if 0, else limit to the
         # maximum display characters length
-        self._max_len = self._max_cols if max_len == 0 else min(max_len, self._max_cols)
-        self.f_type = f_type
-        self._char_list = F_TYPES[f_type]
-        self._setter = setter
-        self._field_id = field_id
+        self._max_len: int = (
+            self._max_cols if max_len == 0 else min(max_len, self._max_cols)
+        )
+        self.f_type: str = f_type
+        self._char_list: bytearray = F_TYPES[f_type]
+        self._setter: callable | None = setter
+        self._field_id: int | None = field_id
+        self._val: bytearray = []
 
         # Set the value
         self.setVal(val)
@@ -282,7 +315,7 @@ class FieldEdit(Screen):
         Side Effect:
             Sets `_val` as a ``bytearray`` converted value of ``val``.
         """
-        # Limit the field field value to the max_len
+        # Limit the field value to the max_len
         self._val = bytearray(
             str(val)[: self._max_len] if val is not None else "", "ascii"
         )

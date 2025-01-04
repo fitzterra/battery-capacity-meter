@@ -294,8 +294,8 @@ ENC_CLK = const(4)
 ENC_DT = const(2)
 ENC_SW = const(1)
 
-# 5Ω load resistor
-LOAD_R = 5
+# Load resistor
+LOAD_R = 8
 
 
 # Config for all battery controllers
