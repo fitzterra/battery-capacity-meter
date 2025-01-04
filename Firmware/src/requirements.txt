@@ -1,0 +1,17 @@
+# Python requirements
+
+# For micropython dev
+esptool
+rshell
+adafruit-ampy
+# NOTE: This does not install the executable in the venv bin dir. You have to
+#       create a symlink in the bin dir to the myp-cros lib. Use pip show
+#       mpy-cross to get install info.
+mpy-cross
+mpremote
+
+# For local python and linting and auto formatting
+ipython
+pylint
+black
+pydoctor
