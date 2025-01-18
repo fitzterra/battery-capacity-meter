@@ -39,7 +39,7 @@ Features
 --------
 
 The following are some of the features of this project:
-    * Hands-off measuring and history recording (see `Data Recording`_).
+    * Hands-off measuring and history recording (see `Telemetry Recording`_).
         * Once a test cycles is started, the battery will be fully charged.
         * From a fully charged state, one or more discharge/charge cycles can be
           started automatically to measure the SoC_.
@@ -65,19 +65,19 @@ The following are some of the features of this project:
         * `SSD1306 OLED`_ for user output interface
         * `Wemos S2 Mini`_ ESP32 MCU running Micropython_
 
-Data Recording
---------------
+Telemetry Recording
+-------------------
 
 Since it takes a long time to charge and discharge a battery, this is a very
 tedious process for a human to monitor and record.
 
 Automating this process was the primary design goal for the BCM².
 
-The `state_broadcast` part of the BCM² firmware monitors the status of the
-`BatteryController` all the time. When certain events like battery inserted,
-battery removed, battery ID set, charging, discharging, cycle complete etc.
-happens, it will send a status message via MQTT_ on a specific topic
-(`net_conf.MQTT_PUB_TOPIC`).
+The `telemetry` part of the BCM² firmware monitors the status of the
+`BatteryController` all the time and reports this as telemetry events. When
+certain events like battery inserted, battery removed, battery ID set,
+charging, discharging, cycle complete etc.  happens, it will send a telemetry
+message via MQTT_ on a specific topic (`net_conf.MQTT_PUB_TOPIC`).
 
 From this it is then possible to record these messages into a database and by
 processing the information from there, one can build a history and status for

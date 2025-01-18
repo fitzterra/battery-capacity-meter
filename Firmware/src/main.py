@@ -9,7 +9,7 @@ from config import HARDWARE_CFG
 from lib.bat_controller import BatteryController
 from lib.utils import stdinKeyMonitor
 from lib import ulogging as logging
-from state_broadcast import broadcast
+from telemetry import broadcast
 
 from screens import uiSetup
 
@@ -136,6 +136,9 @@ class BCSerialUI:
                 self.bc.reset()
             else:
                 self.bc.resetMetrics()
+        elif ch == "s":
+            # Toggle SoC measure state
+            self.bc.socMeasureToggle()
         elif ch == "Z":
             # Simulate a charge/discharge complete state.
             if self.bc.state not in (self.bc.S_CHARGE, self.bc.S_DISCHARGE):
@@ -146,9 +149,8 @@ class BCSerialUI:
                     if self.bc.state == self.bc.S_CHARGE
                     else self.bc.E_dch_done
                 )
-                if self.bc.transition(event):
-                    self.output("Simulating charge/discharge completed.")
-                else:
+                self.output("Simulating charge/discharge completed.")
+                if not self.bc.transition(event):
                     self.output("ERROR Simulating charge/discharge completed.")
         elif ch in ("o", " "):
             # Toggle output pause
@@ -187,6 +189,7 @@ class BCSerialUI:
             + "┃  V mV | V SampT "
             + "┃ S | P | Ch mA | Ch mAh | Ch Tm | C SampT "
             + "┃ S | P | Dch mA | Dch mAh | Dch Tm | D SampT "
+            + "┃ SoC State | SoC Cycle | SoC Time "
             + "┃"
         )
 
@@ -206,6 +209,8 @@ class BCSerialUI:
             ch_vals = self.bc.charge_vals
             dch_vals = self.bc.discharge_vals
 
+            soc_cycle = f"{self.bc.soc_m.cycle}/{self.bc.soc_m.cycles}"
+
             self.output(
                 f"┃ {self.bc.name:4.4s} "
                 + f"┃ {self.bc.state_name:<{st_w}} "
@@ -224,6 +229,9 @@ class BCSerialUI:
                 + f"| {dch_vals[4]:>7} "
                 + f"| {dch_vals[5]:>6} "
                 + f"| {self.bc._dch_mon._tm_adc_sample or 0.0:>5.1f}ms "
+                + f"┃ {self.bc.soc_m.state_name:9.9s} "
+                + f"| {soc_cycle:^9} "
+                + f"| {self.bc.soc_m.cycle_tm:>7}s "
                 + "┃",
             )
 

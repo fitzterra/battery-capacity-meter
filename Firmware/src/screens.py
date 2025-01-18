@@ -11,12 +11,14 @@ Attributes:
     https://docs.micropython.org/en/latest/library/framebuf.html#framebuf.FrameBuffer.ellipse
 """
 
+# We do have much to do here, so
+# @pylint: disable=too-many-lines
+
 import gc
 from micropython import const
 from machine import Pin
 from ssd1306 import SSD1306_I2C
 from lib import ulogging as logging
-from lib.utils import genBatteryID
 from lib.bat_controller import BatteryController
 from ui import (
     Screen,
@@ -447,7 +449,7 @@ class BCMView(Screen):
     One instance is active at any time and a **long press** is used to cycling
     between the available instances.
 
-    The screen will update as the underlying `BatteryController.state` changes.
+    The screen will update as the underlying `BCStateMachine.state` changes.
     For example when no battery is inserted, the screen will show a message to
     this effect, then when the battery is inserted it will update to ask for
     the battery ID to be entered, and after that it will allow the battery to be
@@ -496,7 +498,7 @@ class BCMView(Screen):
             The footer menu is dynamically defined depending on the screen
             we're on. It allows actions and navigation per screen.
 
-        _last_state: Holds the last `BatteryController.state` for `_bc`.
+        _last_state: Holds the last `BCStateMachine.state` for `_bc`.
 
             This is used in the `update` method to detect if there was a state
             change from the last to the current screen update.
@@ -537,11 +539,17 @@ class BCMView(Screen):
 
     def _showHeader(self):
         """
-        Shows the current `BatteryController.name` as a header at the top of
+        Shows the current `BCStateMachine.name` as a header at the top of
         the screen and the battery ID if available.
 
-        This header is show inverted.
+        This header is shown inverted.
         """
+        # We are at time called to update the heade without having cleared the
+        # screen. In this case, if we do not always clear the header first, the
+        # invert further down is going to mess thngs up. So always clear the
+        # header line
+        self._display.fill_rect(0, 0, self.px_w, self.FONT_H, 0)
+
         header = f"{self._bc.name:^{self._max_cols}}"
         self._display.text(header, 0, 0, 1)
         self._invertText(0, 0)
@@ -553,6 +561,12 @@ class BCMView(Screen):
             self._display.text(
                 f"{label}{self._bc.bat_id:>{id_w}.{id_w}}", 0, 1 * self.FONT_H, 1
             )
+
+        # If we are in a SoC measure state, add some SoC info
+        if self._bc.soc_m and self._bc.soc_m.in_progress:
+            self.text("#", x=0, y=0, color=0)
+            cyc = f"{self._bc.soc_m.cycle}/{self._bc.soc_m.cycles}"
+            self.text(cyc, x=self._max_cols - len(cyc), y=0, color=0)
 
     def _activateBCM(self, idx: int | str):
         """
@@ -607,7 +621,7 @@ class BCMView(Screen):
 
     def _stDisabled(self):
         """
-        Handles updating the screen for the `BatteryController.S_DISABLED` state.
+        Handles updating the screen for the `BCStateMachine.S_DISABLED` state.
 
         We only display a message to indicate that we are disabled.
         """
@@ -623,7 +637,7 @@ class BCMView(Screen):
 
     def _stNoBat(self):
         """
-        Handles updating the screen for the `BatteryController.S_NOBAT` state.
+        Handles updating the screen for the `BCStateMachine.S_NOBAT` state.
 
         We only display a message to indicate that we are waiting for a battery
         to be inserted.
@@ -654,7 +668,7 @@ class BCMView(Screen):
 
     def _stGetID(self):
         """
-        Handles updating the screen for the `BatteryController.S_GET_ID` state.
+        Handles updating the screen for the `BCStateMachine.S_GET_ID` state.
 
         When we get here, the `BatteryController` has already created a default
         ID for the newly inserted battery, and this state is there to either
@@ -688,7 +702,7 @@ class BCMView(Screen):
 
     def _stBatID(self):
         """
-        Handles updating the screen for the `BatteryController.S_BAT_ID` state.
+        Handles updating the screen for the `BCStateMachine.S_BAT_ID` state.
 
         This state only maintains an updated battery voltage, and a footer menu
         to allow for charging, discharging, etc.
@@ -705,6 +719,7 @@ class BCMView(Screen):
             self._foot_menu = FootMenu(
                 self,
                 [
+                    ("SoC", "Measure SoC"),
                     ("Ch", "Start Charge"),
                     ("Dch", "Start Discharge"),
                     ("Exit", "Exit Screen"),
@@ -726,10 +741,10 @@ class BCMView(Screen):
 
         We will be called for any of these states:
 
-        * `BatteryController.S_CHARGE`
-        * `BatteryController.S_DISCHARGE`
-        * `BatteryController.S_CHARGE_PAUSE`
-        * `BatteryController.S_DISCHARGE_PAUSE`
+        * `BCStateMachine.S_CHARGE`
+        * `BCStateMachine.S_DISCHARGE`
+        * `BCStateMachine.S_CHARGE_PAUSE`
+        * `BCStateMachine.S_DISCHARGE_PAUSE`
 
         Here we will display the current battery voltage, charge/discharge
         current and charge time. For discharge the current and mAh values are
@@ -763,12 +778,18 @@ class BCMView(Screen):
 
         # Have we created the footer menu yet?
         if self._foot_menu is None:
-            logging.info(
+            logging.debug(
                 "Creating and showing footer menu for S_CHARGE/S_DISCHARGE state."
             )
-            # The footer menu options are different for paused and non-paused
-            # state
-            if not paused:
+            # The footer menu depends on whether we are busy with a SoC
+            # measurement, paused or just charging
+            if self._bc.soc_m.in_progress:
+                # We are busy with a SoC measurement
+                opts = [
+                    ("Cancel", "SoC Measure"),
+                    ("Exit", "Exit Screen"),
+                ]
+            elif not paused:
                 opts = [
                     ("Pause", f"Pause {'Charge' if charging else 'Discharge'}"),
                     ("Exit", "Exit Screen"),
@@ -824,7 +845,8 @@ class BCMView(Screen):
         took to reach this state.
 
         A `FootMenu` will be available to allow resetting the controller and
-        metrics or exit the screen.
+        metrics, or cancelling an active SoC measure operation, or exit the
+        screen.
         """
         # Determine if we are charged or discharged
         # Set charging based of if we charging or discharging
@@ -834,18 +856,35 @@ class BCMView(Screen):
         # battery ID, and footer menu if it is already there.
         self._clear(header_lns=2, footer_lns=2)
 
-        # Have we created the footer menu yet?
-        if self._foot_menu is None:
-            logging.info(
+        # Have we created the footer menu yet, or have the SoC measure
+        # cycle completed?
+        if (
+            self._foot_menu is None
+            or self._bc.soc_m.state == self._bc.soc_m.ST_COMPLETE
+        ):
+            logging.debug(
                 "Creating and showing footer menu for S_CHARGED/S_DISCHARGED state."
             )
+            # The footer menu is slightly different depending on this being a
+            # SoC measurement still in progress or a normal dis/charge complete
+            if (
+                self._bc.soc_m.in_progress
+                and self._bc.soc_m.state != self._bc.soc_m.ST_COMPLETE
+            ):
+                opts = [
+                    ("Cancel", "SoC Measure"),
+                    ("Exit", "Exit Screen"),
+                ]
+            else:
+                opts = [
+                    ("Reset", "Reset Metrics"),
+                    ("Exit", "Exit Screen"),
+                ]
+
             # Create the footer menu, and draw it
             self._foot_menu = FootMenu(
                 self,
-                [
-                    ("Reset", "Reset Metrics"),
-                    ("Exit", "Exit Screen"),
-                ],
+                opts,
                 self.footMenuCB,
             )
 
@@ -876,7 +915,7 @@ class BCMView(Screen):
 
     def _stYanked(self):
         """
-        Handles updating the screen for the `BatteryController.S_YANKED` state.
+        Handles updating the screen for the `BCStateMachine.S_YANKED` state.
 
         It will show a message to indicate that the battery was removed anda
         `FootMenu` to allow resetting the controller or exiting the screen.
@@ -911,7 +950,8 @@ class BCMView(Screen):
         there was a state change from the previous to current call, and then
         call the correct handler to manage the display for the given state.
         """
-        # We have a lot of flow here, so @pylint: disable=too-many-return-statements
+        # We have a lot of flow here, so
+        # @pylint: disable=too-many-return-statements,too-many-branches
 
         # If we do not have an active BCM set yet, we just return
         if self._active_bcm is None:
@@ -925,6 +965,9 @@ class BCMView(Screen):
         # self._last_state to the current state.
         if state_changed := state != self._last_state:
             self._last_state = state
+            # If we are now in SoC measure progress, also update the header
+            if self._bc.soc_m and self._bc.soc_m.in_progress:
+                self._showHeader()
 
         # Disabled?
         if state == BatteryController.S_DISABLED:
@@ -1091,7 +1134,11 @@ class BCMView(Screen):
             # is None.
             self.actShort()
 
-        if opt == "Ch":
+        if opt in ("SoC", "Cancel"):
+            # These are to start or cancel a SoC measurement. For either we use
+            # the convenient toggle
+            self._bc.socMeasureToggle()
+        elif opt == "Ch":
             # Switch charging on
             self._bc.charge()
         elif opt == "Dch":
