@@ -97,7 +97,7 @@ MPY_SRC = boot.py \
 		  i2c_config.py \
 		  config.py \
 		  structures.py \
-		  state_broadcast.py \
+		  telemetry.py \
 		  ui/__init__.py \
 		  ui/ui_input.py \
 		  ui/ui_output.py \
@@ -111,6 +111,7 @@ MPY_SRC = boot.py \
 		  lib/uencoder.py \
 		  lib/ubutton.py \
 		  lib/adc_monitor.py \
+		  lib/statemachines.py \
 		  lib/bat_controller.py \
 		  lib/mqtt_as.py \
 		  screens.py \

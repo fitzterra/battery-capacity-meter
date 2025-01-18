@@ -3,7 +3,8 @@ Battery status and progress broadcasting module.
 
 This module provides support for monitoring one or more `BatteryController`
 instances and publishing regular progress messages via MQTT_ from the
-`broadcast` async task..
+`broadcast` async task. See the `buildMsg` function for details on the
+telemetry message content.
 
 It is also responsible for connecting to the network, and MQTT_ server, and for
 monitoring this connection. If the connection to the WiFi or MQTT_ server drops,
@@ -29,6 +30,7 @@ from lib import ulogging as logging
 from lib.mqtt_as import MQTTClient, config
 from lib.bat_controller import BatteryController
 import net_conf
+from config import TELEMETRY_LOOP_DELAY
 
 
 async def clientUp(client):
@@ -88,8 +90,43 @@ def buildMsg(bc: BatteryController) -> dict:
     """
     Builds the MQTT message based on the status of the supplied BC.
 
+    The telemetry message will be a dictionary as follows:
+
+    .. python::
+
+        {
+            "state": the BC state name as a string (from state_name` property),
+
+            # The rest only if not in S_DISABLED state
+            "bat_id": battery ID if available,
+
+            # The rest only if we have a battery id or busy charging or discharging
+            "bat_v": the battery voltage,
+
+            # The rest only if we are busy charging or discharging
+            # The following are the values for the charge or discharge monitor
+            # depending if we are charging or discharging.
+            "adc_v": dis/charge monitor voltage in mV,
+            "current": dis/charge monitor current in mA,
+            "charge": dis/charge monitor accumulated charge in mC,
+            "mAh": dis/charge monitor accumulated mAh,
+            "tm": total time so far for this operation,
+            "shunt": dis/charge monitor shunt/load resistor value,
+
+            # The rest only if currently busy with a SoC measurement
+            "soc_measure": {
+                "state": SoC measure state name (from state_name property),
+                "cycle": current cycle number in SoC measurement,
+                "cycles": total cycles to run for this SoC measurement,
+                "cycle_tm": total time in seconds for the current state and cycle,
+            }
+        }
+
     Args:
         bc: A Battery controller instance.
+
+    Returns:
+        The dictionary as described above.
     """
 
     msg = {"state": bc.state_name}
@@ -119,8 +156,8 @@ def buildMsg(bc: BatteryController) -> dict:
     if bc.state == bc.S_BAT_ID:
         return msg
 
-    # We are charging or discharging. Add the correct charge monitor details.
-    # @pylint: disable=protected-access
+    # We are charging or discharging or in SoC measurement cycle. Add the
+    # correct charge monitor details.  @pylint: disable=protected-access
     mon = bc._ch_mon if bc.state in (bc.S_CHARGE, bc.S_CHARGED) else bc._dch_mon
 
     msg["adc_v"] = mon.voltage
@@ -129,6 +166,14 @@ def buildMsg(bc: BatteryController) -> dict:
     msg["mAh"] = mon.mAh
     msg["tm"] = round(mon.charge_time / 1000)
     msg["shunt"] = mon._shunt
+
+    if bc.soc_m.in_progress:
+        msg["soc_measure"] = {
+            "state": bc.soc_m.state_name,
+            "cycle": bc.soc_m.cycle,
+            "cycles": bc.soc_m.cycles,
+            "cycle_tm": bc.soc_m.cycle_tm,
+        }
 
     return msg
 
@@ -167,7 +212,13 @@ async def broadcast(bcs: list[BatteryController,]):
 
     while True:
         for bc in bcs:
-            await asyncio.sleep_ms(250)
+            # TODO: In order to ensure we see change immediately, we need to
+            # sleep much shorter here and keep monitoring for state changes.
+            # If a change is seen, we report immediately, else we delay the
+            # reporting to configurable time.
+            # I.o.w we need to detect changes immediately, but not flood the
+            # telemetry output...
+            await asyncio.sleep_ms(TELEMETRY_LOOP_DELAY)
 
             st = stats[bc.name]
             topic = msg = None

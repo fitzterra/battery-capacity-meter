@@ -2,7 +2,7 @@
 Network and related configs module.
 
 This module contains the required configs for the WiFi and MQTT access
-credentials as used by the `state_broadcast` and `net_conn` modules.
+credentials as used by the `telemetry` and `net_conn` modules.
 
 It is used by various other modules that needs access to this config.
 
