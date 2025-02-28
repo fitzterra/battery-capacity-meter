@@ -211,7 +211,7 @@ async def broadcast(bcs: list[BatteryController,]):
     for task in (clientUp, clientDown, messages):
         asyncio.create_task(task(client))
 
-    stats = {bc.name: {"state": None} for bc in bcs}
+    stats = {bc.name: {"state": None, "bat_v": None} for bc in bcs}
 
     while True:
         for next_bc in bcs:
@@ -223,8 +223,8 @@ async def broadcast(bcs: list[BatteryController,]):
                 await asyncio.sleep_ms(20)
 
             # In case we have any BCs in telemetry_trigger, we will transfer
-            # all of them to a new list, and includce the current BCX we need
-            # to emit telemetry data for. We then cycle throug our new list and
+            # all of them to a new list, and include the current BCM we need
+            # to emit telemetry data for. We then cycle through our new list and
             # emit the data. This way we also clear any triggers added before.
             emit_list = []
             while telemetry_trigger:
@@ -239,14 +239,37 @@ async def broadcast(bcs: list[BatteryController,]):
                 st = stats[bc.name]
                 topic = msg = None
 
+                # If the state had changed from the last we have in the stat
+                # history, or we are charging or discharging, we emit a
+                # message
                 if st["state"] != bc.state or bc.state in [
-                    bc.S_BAT_ID,
                     bc.S_CHARGE,
                     bc.S_DISCHARGE,
                 ]:
+                    # Set the history state and battery voltages to the current
+                    # state and voltage
                     st["state"] = bc.state
-                    topic = f"{net_conf.MQTT_PUB_TOPIC}/{bc.name}"
+                    st["bat_v"] = bc.bat_v
+                    # Build the message we want to send.
                     msg = buildMsg(bc)
 
+                # While in Bat+ID state, the battery voltage may change arger a
+                # charge or discharge cycles. This allows us a view in how the
+                # battery recovers, so we want to publish these battery changes
+                # when it does, but once it has stabilized, we want to stop
+                # sending the messages.
+                # To do this, we store the battery voltage in the "bat_v" key
+                # history for the BC. If we are in S_BAT_ID state and the
+                # voltages has changed, we publish after saving the new
+                # voltage.
+                # If we just changed to the S_BAT_ID state, msg would already
+                # have been set to show the initial S_BAT_ID state, so we then
+                # do not do a second check for this state.
+                if msg is None and bc.state == bc.S_BAT_ID:
+                    if bc.bat_v != st["bat_v"]:
+                        st["bat_v"] = bc.bat_v
+                        msg = buildMsg(bc)
+
                 if msg:
+                    topic = f"{net_conf.MQTT_PUB_TOPIC}/{bc.name}"
                     await client.publish(topic, json.dumps(msg), qos=0)
