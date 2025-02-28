@@ -25,10 +25,11 @@ site local config, module.
 
 import json
 import ntptime
+import utime as time
 import uasyncio as asyncio
 from lib import ulogging as logging
 from lib.mqtt_as import MQTTClient, config
-from lib.bat_controller import BatteryController
+from lib.bat_controller import BatteryController, telemetry_trigger
 import net_conf
 from config import TELEMETRY_LOOP_DELAY
 
@@ -115,6 +116,7 @@ def buildMsg(bc: BatteryController) -> dict:
 
             # The rest only if currently busy with a SoC measurement
             "soc_measure": {
+                "uid": A unique ID for this SoC measurement
                 "state": SoC measure state name (from state_name property),
                 "cycle": current cycle number in SoC measurement,
                 "cycles": total cycles to run for this SoC measurement,
@@ -169,6 +171,7 @@ def buildMsg(bc: BatteryController) -> dict:
 
     if bc.soc_m.in_progress:
         msg["soc_measure"] = {
+            "uid": bc.soc_m.uid,
             "state": bc.soc_m.state_name,
             "cycle": bc.soc_m.cycle,
             "cycles": bc.soc_m.cycles,
@@ -211,26 +214,39 @@ async def broadcast(bcs: list[BatteryController,]):
     stats = {bc.name: {"state": None} for bc in bcs}
 
     while True:
-        for bc in bcs:
-            # TODO: In order to ensure we see change immediately, we need to
-            # sleep much shorter here and keep monitoring for state changes.
-            # If a change is seen, we report immediately, else we delay the
-            # reporting to configurable time.
-            # I.o.w we need to detect changes immediately, but not flood the
-            # telemetry output...
-            await asyncio.sleep_ms(TELEMETRY_LOOP_DELAY)
+        for next_bc in bcs:
+            start = time.ticks_ms()
+            while (
+                time.ticks_diff(time.ticks_ms(), start) < TELEMETRY_LOOP_DELAY
+                and not telemetry_trigger
+            ):
+                await asyncio.sleep_ms(20)
 
-            st = stats[bc.name]
-            topic = msg = None
+            # In case we have any BCs in telemetry_trigger, we will transfer
+            # all of them to a new list, and includce the current BCX we need
+            # to emit telemetry data for. We then cycle throug our new list and
+            # emit the data. This way we also clear any triggers added before.
+            emit_list = []
+            while telemetry_trigger:
+                # Clear off telemetry_trigger and add to emit_list
+                emit_list.append(telemetry_trigger.pop(0))
 
-            if st["state"] != bc.state or bc.state in [
-                bc.S_BAT_ID,
-                bc.S_CHARGE,
-                bc.S_DISCHARGE,
-            ]:
-                st["state"] = bc.state
-                topic = f"{net_conf.MQTT_PUB_TOPIC}/{bc.name}"
-                msg = buildMsg(bc)
+            # Now add the current bc
+            emit_list.append(next_bc)
 
-            if msg:
-                await client.publish(topic, json.dumps(msg), qos=0)
+            # Emit all their telemetry data
+            for bc in emit_list:
+                st = stats[bc.name]
+                topic = msg = None
+
+                if st["state"] != bc.state or bc.state in [
+                    bc.S_BAT_ID,
+                    bc.S_CHARGE,
+                    bc.S_DISCHARGE,
+                ]:
+                    st["state"] = bc.state
+                    topic = f"{net_conf.MQTT_PUB_TOPIC}/{bc.name}"
+                    msg = buildMsg(bc)
+
+                if msg:
+                    await client.publish(topic, json.dumps(msg), qos=0)

@@ -300,17 +300,17 @@ LOAD_R = 8
 
 # Config for all battery controllers
 HARDWARE_CFG = [
-    ("BC0", (0x48, 1, None), (16, 0x48, 2, 1, None), (18, 0x48, 0, LOAD_R, None)),
-    ("BC1", (0x49, 3, None), (33, 0x49, 2, 1, None), (35, 0x48, 3, LOAD_R, None)),
-    ("BC2", (0x49, 0, None), (37, 0x4A, 0, 1, None), (39, 0x49, 1, LOAD_R, None)),
-    ("BC3", (0x4A, 2, None), (40, 0x4A, 3, 1, None), (38, 0x4A, 1, LOAD_R, None)),
+    ("BC0", (0x48, 1, 5), (16, 0x48, 2, 1, None), (18, 0x48, 0, LOAD_R, None)),
+    ("BC1", (0x49, 3, 5), (33, 0x49, 2, 1, None), (35, 0x48, 3, LOAD_R, None)),
+    ("BC2", (0x49, 0, 5), (37, 0x4A, 0, 1, None), (39, 0x49, 1, LOAD_R, None)),
+    ("BC3", (0x4A, 2, 5), (40, 0x4A, 3, 1, None), (38, 0x4A, 1, LOAD_R, None)),
 ]
 
 # Default spike detection thresholds and times for voltage spike detection.
-V_SPIKE_TH = 1500  # Threshold for detecting voltage spikes
+V_SPIKE_TH = 600  # Threshold for detecting voltage spikes
 # Max time for this change to happen - removing a battery has a slow ramp down
 # to 0V
-V_SPIKE_TH_T = 2000
+V_SPIKE_TH_T = 1000
 
 # Default spike detection thresholds and times for charge current spike detection.
 C_SPIKE_TH = 100
@@ -325,9 +325,27 @@ D_SPIKE_TH_T = 600
 # The battery voltage threshold at which we determine that charge is
 # completed.
 C_VOLTAGE_TH = 4180
+## Discharge thresholds
 # The battery voltage threshold at which we determine that discharge is
-# completed.
+# completed. This should be above the DW01 over-discharge threshold of between
+# 2.3V and 2.5V in order to not have the DW01 disconnect the battery. Keep in
+# mind that id the Voltage monitor has an averaging window set, that the
+# averaging may be lagging the voltage that the DW01 sees.
 D_VOLTAGE_TH = 2600
+# The voltage the battery needs to return to after discharge before we deem it
+# recovered from discharge. The DW01 has this set to between 2.9V and 3.1V as a
+# guide.
+D_V_RECOVER_TH = 2900
+# The max time we will allow for recovery after a discharge. If the recovery
+# conditions are not met in this period, we will assume the battery is not a
+# good state.
+D_RECOVER_MAX_TM = 5 * 60
+# Once we bring in temperature measurement, this will be the recovery temp we
+# expect the battery to be at.
+D_RECOVER_TEMP = 40
+# Since we do not have battery temperature measurement currently, we will use a
+# min rest time instead. This must be less than D_RECOVER_TM
+D_RECOVER_MIN_TM = 3 * 60
 
 ##### Telemetry config #####
 # The amount of time to sleep in the telemetry detection loop.
@@ -341,8 +359,7 @@ TELEMETRY_LOOP_DELAY = 250
 ##### SoC Measurement config ####
 # The amount of time to rest after a charge or discharge complete to allow the
 # battery and/or load temperatures to stabilize.
-# SOC_REST_TIME = 5 * 60
-SOC_REST_TIME = 10
+SOC_REST_TIME = 5 * 60
 
 # The number of cycles to run for a SoC measurement
 SOC_NUM_CYCLES = 2

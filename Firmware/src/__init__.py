@@ -48,8 +48,8 @@ The following are some of the features of this project:
       Bluetooth, etc.
     * Allows each battery to be given a unique ID which is used to keep a history
       of all tests and measurements over time.
-    * Live broadcasting of measurement data via MQTT.
-    * This data feed can then be recorded in a Database for the given battery ID.
+    * Live broadcasting of measurement data via MQTT. This data feed can then
+      be recorded in a Database for the given battery ID.
     * The following information is measured and broadcast in this way:
         * Battery ID
         * Charge/discharge cycle start and end
@@ -59,7 +59,9 @@ The following are some of the features of this project:
           holder, when the battery ID was set, if it was removed before or during a
           test cycle, and more.
     * Uses off the shelve components:
-        * TP4056_ charger module for charging and charge current measurement.
+        * TP4056_ charger module for charging and charge current measurement,
+          including the DW01_ battery protector on the board for battery
+          protection.
         * ADS1115_ 4 channel ADC for voltage/current measurements.
         * KY-040_ Rotary Encoder as user input
         * `SSD1306 OLED`_ for user output interface
@@ -121,6 +123,7 @@ Due to the way blah, blah, blah....
 .. _SoC: https://www.batterydesign.net/battery-management-system/state-of-charge
 .. _`Coulomb Counting`: https://www.batterydesign.net/soc-estimation-by-coulomb-counting/
 .. _TP4056: https://components101.com/modules/tp4056a-li-ion-battery-chargingdischarging-module
+.. _DW01: https://www.best-microcontroller-projects.com/support-files/dw01a.pdf
 .. _ADS1115: https://components101.com/modules/ads1115-module-with-programmable-gain-amplifier
 .. _`SSD1306 OLED`: https://components101.com/displays/oled-display-ssd1306
 .. _KY-040: https://components101.com/modules/KY-04-rotary-encoder-pinout-features-datasheet-working-application-alternative

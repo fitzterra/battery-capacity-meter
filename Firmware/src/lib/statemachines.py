@@ -2,6 +2,24 @@
 Defines the required `Finite State Machines`_ used for the battery SoC_
 tester. 
 
+Attributes:
+
+    telemetry_trigger: Very simple trigger mechanism to let the
+        `telemetry.broadcast` task know it should immediately emit telemetry for
+        a given `BatteryController`.
+
+        The `telemetry` module will import this list and the
+        `telemetry.broadcast` method will monitor it. If the
+        `SoCStateMachine.monitorBCState` task needs to have the telemetry data
+        for a given BC be emitted on completion of any of the SoC cycles, it
+        will add the BC instance to this list, and then monitor the list
+        waiting for the BC instance to not be there anymore.
+
+        On the other side, `telemetry.broadcast` will also monitor this list.
+        As soon as it sees any BC instances in the list, it will immediately
+        emit the current state as telemetry data for that BC, and remove the BC
+        from the list.
+
 .. _`Finite State Machines`: https://en.wikipedia.org/wiki/Finite-state_machine
 .. _SoC: https://www.batterydesign.net/battery-management-system/state-of-charge
 """
@@ -10,12 +28,21 @@ from micropython import const
 import utime as time
 import uasyncio as asyncio
 from lib import ulogging as logging
+from lib.uuid import shortUID
 
 from config import (
     SOC_REST_TIME,
     SOC_NUM_CYCLES,
-    TELEMETRY_WAIT,
+    D_V_RECOVER_TH,
+    D_RECOVER_MAX_TM,
+    D_RECOVER_MIN_TM,
+    TELEMETRY_LOOP_DELAY,
 )
+
+
+# This is a very simple signaling method to let the Telemetry task know it
+# needs to emit the telemetry for a specific BC.
+telemetry_trigger: list = []
 
 
 class BCStateMachine:
@@ -70,9 +97,8 @@ class BCStateMachine:
 
         E_dch_done: Event: Discharging is done.
 
-            When a `BatteryController._dischargeSpike` is detected and the
-            `BatteryController._bat_v_track` voltage is less than `D_VOLTAGE_TH`
-
+            When the battery voltage monitored by `BatteryController._v_mon` is
+            less than or equal to `D_VOLTAGE_TH`
 
         E_charge: Event: Start charging. Called to switch on MOSFET on success
         E_discharge: Event: Start discharging. Called to switch on MOSFET on success
@@ -415,6 +441,11 @@ class SoCStateMachine:
                 not care about the BC state since in these states we would be
                 done with SoC measure anyway.
 
+        uid: A unique ID to identify this SoC Measurement.
+
+            This is usefull to group event records together later. It will be
+            an 8 character lowercase hex string like: `'5044d5c4'`
+
         state: This will be the current state as defined by the various
             ``ST_???`` constants.
 
@@ -588,6 +619,8 @@ class SoCStateMachine:
         self.cycle_tm = 0
         # Can be tested to determine if a SoC measurement is in progress
         self.in_progress = False
+        # UID to identify each full SoC from. Will be set and cleared by monitorBCState
+        self.uid = None
 
     def __str__(self) -> str:
         """
@@ -713,7 +746,7 @@ class SoCStateMachine:
 
         # Perform BC functions depending on the event
 
-        # This is a charge event, we need to start charging on the BC after a
+        # If this is a charge event, we need to start charging on the BC after a
         # reset if needed
         if event == self.EV_charge:
             # We do not need to reset the BC for the ST_CHARGE_1ST state since
@@ -723,7 +756,7 @@ class SoCStateMachine:
             # Start charging
             return self._bc.transition(self._bc.E_charge)
 
-        # This is a discharge event, we need to start discharging on the BC
+        # If this is a discharge event, we need to start discharging on the BC
         # after resetting the BC
         if event == self.EV_discharge:
             self._resetBC()
@@ -768,6 +801,9 @@ class SoCStateMachine:
         # multiplication, we convert our config times here to ms one, and from
         # then on all timers use ms.
         rest_time = SOC_REST_TIME * 1000
+
+        # Get a SoC measure uid
+        self.uid = shortUID()
 
         logging.info("%s: Starting BC State monitor for BC: %s", self, self._bc)
 
@@ -825,24 +861,52 @@ class SoCStateMachine:
                 self._bc.state == self._bc.S_DISCHARGED
                 and self.state != self.ST_REST_DCH
             ):
-                # We now transition with a charge completed event
+                # We now transition with a discharge completed event and reset
+                # the cycle timer
                 self.transition(self.EV_discharge_complete)
                 cycle_start = time.ticks_ms()
                 continue
 
-            # Are we resting?
-            if self.state in (self.ST_REST_CH, self.ST_REST_DCH):
+            # Are we resting after a discharge?
+            if self.state == self.ST_REST_DCH:
+                # We can only come out of rest if:
+                # * The battery voltage has recover to at least D_V_RECOVER_TH
+                # * The battery temperature has dropped to D_RECOVER_TEMP
+                # ...but...
+                # We have no temperature monitor at the moment, so we force a
+                # min rest period which should be greater than D_RECOVER_MAX_TM
+                if (
+                    # pylint: disable=protected-access
+                    self._bc._v_mon.voltage >= D_V_RECOVER_TH
+                    and self.cycle_tm >= D_RECOVER_MIN_TM
+                ):
+                    # We're done resting. Start another charging cycle
+                    self.transition(self.EV_charge)
+                    cycle_start = time.ticks_ms()
+                    continue
+
+                # If we have exceeded the max rest time, then the battery is
+                # probably not going to recover, so we want to stop the SoC
+                # measurement.
+                if self.cycle_tm >= D_RECOVER_MAX_TM:
+                    logging.info(
+                        "%s: Battery voltage did not recover after "
+                        "discharge and additional resting. "
+                        "Aborting SoC measure.",
+                        self,
+                    )
+                    self.transition(self.EV_unexp_bc_state)
+                    continue
+
+            # Are we resting after a charge cycle?
+            if self.state == self.ST_REST_CH:
                 # Continue resting if we are not done yet. The cycle timer
                 # would have been set when we started this cycle
                 if time.ticks_diff(time.ticks_ms(), cycle_start) < rest_time:
                     continue
 
-                # We're done resting. Set the next state and reset the timer
-                self.transition(
-                    self.EV_discharge
-                    if self.state == self.ST_REST_CH
-                    else self.EV_charge
-                )
+                # We're done resting. Go into a discharge cycle now
+                self.transition(self.EV_discharge)
                 cycle_start = time.ticks_ms()
 
             # TODO: This is where we can check for charging longer than it
@@ -851,14 +915,31 @@ class SoCStateMachine:
         # We're done with the loop. Log and info message.
         logging.info("%s: SoC measure done. Exiting BC monitor.", self)
 
-        # In case the telemetry reporter needs time to pick up on the change,
-        # let's just wait here for a quick bit before we reset the state and
-        # exit the coro
-        await asyncio.sleep_ms(TELEMETRY_WAIT)
+        # We want the telemetry broadcaster to immediately emit the telemetry
+        # for this BC. We do this by signaling it through the telemetry_trigger
+        # list.
+        telemetry_trigger.append(self._bc)
+        # We give the Telemetry emitter 6 changes to emit the telemetry data
+        for _ in range(6):
+            # To waste as little time as possible, we check the trigger every
+            # 1/4 TELEMETRY_LOOP_DELAY
+            await asyncio.sleep_ms(TELEMETRY_LOOP_DELAY // 4)
+
+            # Has it been removed?
+            if self._bc not in telemetry_trigger:
+                break
+
+        # We remove the trigger and log an error if still there.
+        if self._bc in telemetry_trigger:
+            logging.error("%s: Telemetry was not emitted for this cycle.")
+            telemetry_trigger.remove(self._bc)
+
+        # Reset our state before we exit this coro
         self.state = self.ST_READY
         self.cycle = 0
         self.cycle_tm = 0
         self.in_progress = False
+        self.uid = None
 
     def start(self):
         """
