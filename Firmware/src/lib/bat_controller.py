@@ -22,10 +22,17 @@ Required external libs:
 """
 
 import uasyncio as asyncio
+import utime as time
 from lib import ulogging as logging
 from lib.adc_monitor import VoltageMonitor, ChargeMonitor
-from lib.statemachines import BCStateMachine, SoCStateMachine
-from lib.utils import genBatteryID, ewAverage
+from lib.statemachines import (  # pylint: disable=unused-import
+    BCStateMachine,
+    SoCStateMachine,
+    # We do not use this import here, but we import it as a convenience for the
+    # telemetry module that will use it.
+    telemetry_trigger,
+)
+from lib.utils import genBatteryID
 
 from i2c_config import Pin
 from config import (
@@ -101,8 +108,6 @@ class BatteryController(BCStateMachine):
             charging.
         _dch_mon: A `ChargeMonitor` as described above to monitor battery
             discharging.
-        _bat_v_track: Tracks the last few battery voltage readings to help
-            detect fully charge/discharged states.
     """
 
     # Do not worry @pylint: disable=too-many-instance-attributes
@@ -204,15 +209,8 @@ class BatteryController(BCStateMachine):
         # Not disabled, so we can transition to the initialized state.
         self.transition(self.E_init)
 
-        # Tracks the last few battery voltage readings to help detect fully
-        # charge/discharged states
-        self._bat_v_track: int = 0
-
         # Set up a State of Charge monitor state machine
         self.soc_m = SoCStateMachine(self)
-
-        # And start the battery voltage tracker
-        asyncio.create_task(self._trackBatV())
 
     def __str__(self) -> str:
         """
@@ -341,35 +339,7 @@ class BatteryController(BCStateMachine):
         # As soon as get a new ID for a newly inserted battery, we reset all
         # old monitors.
         if self.state == self.S_BAT_ID:
-            # See below why we save the current battery voltage.
-            v_orig = self.bat_v
-
             self._resetMonitors()
-            # We may also get here when a very flat battery is discharged. The
-            # DW01 on the TP4056 disconnects the battery at around 2.4 volt
-            # during discharge, and keeps it disconnected until the battery
-            # voltage gets back to about 3.0V. For a battery with a very low
-            # charge this may not happen, or could take very long to happen,
-            # and we are then stuck in the S_DISCHARGED state. An
-            # E_reset_metrics event from that state will bring us here, because
-            # it is assumed the battery has now recovered to above the over
-            # discharge voltage.
-            # If however the voltage at this point is lower than D_VOLTAGE_TH,
-            # then it makes no sense to say we have a battery in the holder.
-            # In this case, we simulated a yanked battery to get to a yanked
-            # state.
-            # Note that the reset above would have reset the battery voltage by
-            # the time we get here to test, so we use the saved battery voltage
-            # from before the reset.
-            if v_orig < D_VOLTAGE_TH:
-                logging.info(
-                    "%s: Battery voltage too low (%smV) for this state. "
-                    "Simulating a yank event.",
-                    self._bc_prefix,
-                    v_orig,
-                )
-                return self.transition(self.E_v_drop)
-
             # Nothing failed here ,so we return True
             return True
 
@@ -386,6 +356,8 @@ class BatteryController(BCStateMachine):
         # When we transitioned to discharging, we need to switch the controller
         # on.
         if self.state == self.S_DISCHARGE:
+            # First start the discharge monitor
+            asyncio.create_task(self._dischargeMonitor())
             # NOTE: If our FSM is correct we should not ever get an error here.
             return self._cdControl(state=True, dch=True)
 
@@ -489,29 +461,6 @@ class BatteryController(BCStateMachine):
 
         return True
 
-    async def _trackBatV(self):
-        """
-        AsyncIO task that tracks an average of the battery voltage over a
-        small sample window to help with fully charged and discharged
-        detection.
-
-        When fully discharged, the DW01 protection chips disconnects the
-        battery which means that by the time the discharge callback is called,
-        we do not know what the battery voltage was, especially since the
-        voltage monitor is not guaranteed to use a filter to average the
-        voltage.
-
-        For this reason, we keep our own voltage average in `_bat_v_track`
-        using this coro that updates the average every 1/2 second over a 3
-        sample window.
-        """
-        self._bat_v_track = 0
-        alpha = 1 / 3  # 3 sample window
-
-        while True:
-            await asyncio.sleep_ms(500)
-            self._bat_v_track = ewAverage(alpha, self._v_mon.voltage, self._bat_v_track)
-
     def _voltageSpike(self, jump: bool, v_from: bool, v_to: bool):
         """
         Callback for when a battery voltage spike was detected.
@@ -525,11 +474,12 @@ class BatteryController(BCStateMachine):
             v_to: The value to which the jump occurred.
         """
         logging.info(
-            "%s: Voltage spike detected: %s (%s -> %s)",
+            "%s: Voltage spike detected: %s (%s -> %s = %sv)",
             self._bc_prefix,
             "jump" if jump else "drop",
             v_from,
             v_to,
+            v_to - v_from,
         )
         # Update the state if possible
         if not self.transition(self.E_v_jump if jump else self.E_v_drop):
@@ -558,7 +508,7 @@ class BatteryController(BCStateMachine):
             v_to,
         )
         # Did we reach the end of charge?
-        if self._bat_v_track > C_VOLTAGE_TH:
+        if self._v_mon.voltage > C_VOLTAGE_TH:
             if not self.transition(self.E_ch_done):
                 logging.error(
                     "%s: Unable to transition to fully charged.",
@@ -608,26 +558,13 @@ class BatteryController(BCStateMachine):
         .. _TP4056: https://components101.com/modules/tp4056a-li-ion-battery-chargingdischarging-module
         """
         logging.info(
-            "%s: Discharge spike detected: %s (%s -> %s, track_v: %s)",
+            "%s: Discharge spike detected: %s (%s -> %s, bat_v: %s)",
             self._bc_prefix,
             "jump" if jump else "drop",
             v_from,
             v_to,
-            self._bat_v_track,
+            self._v_mon.voltage,
         )
-        # Did we reach the end of discharge?
-        if self._bat_v_track < D_VOLTAGE_TH:
-            # Now we try transition to discharged state
-            if not self.transition(self.E_dch_done):
-                logging.error(
-                    "%s: Unable to transition to fully discharged.",
-                    self._bc_prefix,
-                )
-            else:
-                # Transition to fully discharged was successful, so we return.
-                # If it was not successful, we will try to make it go to
-                # dch_jump then.
-                return
 
         # Update the state if possible
         if not self.transition(self.E_dch_jump if jump else self.E_dch_drop):
@@ -696,6 +633,67 @@ class BatteryController(BCStateMachine):
 
         logging.error("%s: Unable to start charging.", self._bc_prefix)
         return False
+
+    async def _dischargeMonitor(self):
+        """
+        This coro is started for a discharge cycle, and monitors the battery
+        voltage to detect when discharge is complete.
+
+        Discharge is complete when the battery voltage (preferably using a
+        windowing average for transient filtering) reaches the `D_VOLTAGE_TH`.
+
+        The test for complete will be done every 100ms (hardcoded for now).
+
+        Once discharge is complete, this coro will generate an `E_dch_done`
+        event and exit.
+        """
+        logging.info("%s: Starting discharge monitor.", self._bc_prefix)
+
+        # When we get here it may be right after a monitor reset which means
+        # the voltage will not be correct. For this reason we pause here for a
+        # bit to get the voltage monitor to register the correct voltage
+        await asyncio.sleep_ms(1000)
+
+        # Monitor for discharge complete
+        while self._v_mon.voltage >= D_VOLTAGE_TH:
+            await asyncio.sleep_ms(100)
+
+        # Our voltage should slowly decrease, but we could be trigger if the
+        # battery is yanked and the voltage spike detector did not pick the
+        # spike up yet.
+        # So, now we monitor the state for the V_SPIKE_TH_T period and if we
+        # see the state change to Yanked, then we know it was the battery
+        # being removed and not due to we reaching the end of change.
+        start = time.ticks_ms()
+        while (
+            self.state != self.S_YANKED
+            and time.ticks_diff(time.ticks_ms(), start) < V_SPIKE_TH_T
+        ):
+            await asyncio.sleep_ms(100)
+
+        # We just exit on a yank
+        if self.state == self.S_YANKED:
+            logging.info(
+                "%s: Exiting discharge monitor on battery being yanked.",
+                self._bc_prefix,
+            )
+            return
+
+        logging.info(
+            "%s: Discharge complete with battery voltage at: %s. "
+            "Exiting discharge monitor.",
+            self._bc_prefix,
+            self._v_mon.voltage,
+        )
+
+        if not self.transition(self.E_dch_done):
+            logging.error(
+                "%s: Unable to transition to fully discharged. "
+                "Forcing Discharge off.",
+                self._bc_prefix,
+            )
+            # Try to force switch discharging off
+            self._cdControl(state=False, dch=True)
 
     def discharge(self) -> bool:
         """
