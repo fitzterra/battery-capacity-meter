@@ -639,6 +639,60 @@ class Calibration(Screen):
             # Return to previous
             self._curr_mon._shunt -= val
 
+    def _saveCalibration(self):
+        """
+        Save the value that have now been calibrated.
+
+        This function will import `shunt_conf`, then use the ``name`` attribute
+        of the current BC (`_bc`) and whether we are calibrating charging or
+        discharging, to construct the shut resistor config name as:
+
+            BCn_CH_R   # Charge calibration
+
+        or
+
+            BCn_DCH_R  # Discharge calibration
+
+        where ``BCn`` comes from the `_bc` ``name`` attribute.
+
+        This config variable is then set to the current `_shunt` value in
+        `shunt_conf`, after which `sitelocal_conf.updateLocal` is called to
+        save this shunt config value to a site local config file.
+
+        These saved values will then later be applied when constructing
+        `config.HARDWARE_CFG` from imports from `shunt_conf` and this site
+        local config file.
+        """
+        try:
+            # We only import these when needed
+            # pylint: disable=import-outside-toplevel
+            import shunt_conf
+            from sitelocal_conf import updateLocal
+
+            # Build up the config value based on how it is expected in
+            # shunt_conf.py
+            conf_name = (
+                f"{self._bc.name}_{'D' if self._cal_opt == self.C_DCH else ''}CH_R"
+            )
+
+            setattr(shunt_conf, conf_name, self._shunt)
+
+            updateLocal(conf_name, shunt_conf)
+        except Exception as exc:
+            logging.error(
+                "Screen %s: Error saving local calibrated shunt.  Error: %s",
+                self.name,
+                exc,
+            )
+            return
+
+        logging.info(
+            "Screen %s: Saved calibration %s=%s to site local shunt_conf_local.py",
+            self.name,
+            conf_name,
+            self._shunt,
+        )
+
     def setup(self):
         """
         Set the screen up.
@@ -763,10 +817,13 @@ class Calibration(Screen):
         """
         # If we're calibrating, this click means we are exiting.
         if self._state == self.S_CALIB:
-            logging.info("Screen %s: Completed calibration.")
+            logging.info("Screen %s: Completed calibration.", self.name)
             # Switch off both charge and discharge controllers.
             # It's OK to use _cdControl here @pylint: disable=protected-access
             self._bc._cdControl(state=False, ch=True, dch=True)
+
+            # Save the calibrated value
+            self._saveCalibration()
 
             # Reset the current monitor pointer and return to selecting the
             # option to calibrate

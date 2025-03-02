@@ -32,12 +32,11 @@ the pin (``Vprog``).
 
 To use the ``PROG`` pin of the TP4056_ as charge monitor input for the
 `BatteryController`, we can effectively say the "current sensing" resistor is
-1Ω.
+1Ω. This is however not 100% accurate and the resistor value can be calibrated
+at runtime. See `shunt_conf`.
 
-For the discharge monitor, we define the ``LOAD`` resistor (`LOAD_R`) in this
-config file.  This will make it more difficult to change this at runtime, but
-for now this should be OK.  We can revisit how to set this resistor value
-dynamically later.
+For the discharge monitor, the load resistor is also defined in `shunt_conf` and
+can be calibrated at runtime.
 
 Schematic
 ~~~~~~~~~
@@ -46,6 +45,8 @@ Schematic
 
 Hardware config
 ~~~~~~~~~~~~~~~
+
+See above and `shunt_conf` for more info on the **resistor** values.
 
 .. Note: The table below is a bit tricky to render with pydoctor. To keep it
    fairly compact some headers span columns, and are double line header. This
@@ -56,33 +57,24 @@ Hardware config
    not seem to help.
    BTW: This is RST comment, but will probably render as an HTML comment :-(
 
-====== ========= ================ ======= ==== ==== ======== ========== ========
- ‐        ‐             ‐         Control    ADC       ‐          Schematic
------- --------- ---------------- ------- --------- -------- -------------------
-Ctrl   Function  Type               GPIO  Addr Chan Resistor CTL Pin    ADC Chan
-====== ========= ================ ======= ==== ==== ======== ========== ========
-**B0** Bat V     `VoltageMonitor`    ‐    0x48  1   ‐        ‐          B0_O+B_V
-**B0** Charge    `ChargeMonitor`    16    0x48  2   1        B0_CH_CTL  B0_CH_C
-**B0** Discharge `ChargeMonitor`    18    0x48  0   `LOAD_R` B0_DCH_CTL B0_DCH_C
-====== ========= ================ ======= ==== ==== ======== ========== ========
-
-====== ========= ================ ======= ==== ==== ======== ========== ========
-**B1** Bat V     `VoltageMonitor`    ‐    0x49  3   ‐        ‐          B1_O+B_V
-**B1** Charge    `ChargeMonitor`    33    0x49  2   1        B1_CH_CTL  B1_CH_C
-**B1** Discharge `ChargeMonitor`    35    0x48  3   `LOAD_R` B1_DCH_CTL B1_DCH_C
-====== ========= ================ ======= ==== ==== ======== ========== ========
-
-====== ========= ================ ======= ==== ==== ======== ========== ========
-**B2** Bat V     `VoltageMonitor`    ‐    0x49  0   ‐        ‐          B2_O+B_V
-**B2** Charge    `ChargeMonitor`    37    0x4A  0   1        B2_CH_CTL  B2_CH_C
-**B2** Discharge `ChargeMonitor`    39    0x49  1   `LOAD_R` B2_DCH_CTL B2_DCH_C
-====== ========= ================ ======= ==== ==== ======== ========== ========
-
-====== ========= ================ ======= ==== ==== ======== ========== ========
-**B3** Bat V     `VoltageMonitor`    ‐    0x4A  2   ‐        ‐          B3_O+B_V
-**B3** Charge    `ChargeMonitor`    40    0x4A  3   1        B3_CH_CTL  B3_CH_C
-**B3** Discharge `ChargeMonitor`    38    0x4A  1   `LOAD_R` B3_DCH_CTL B3_DCH_C
-====== ========= ================ ======= ==== ==== ======== ========== ========
+====== ========= ================ ======= ==== ==== =========== ========== ========
+ ‐        ‐             ‐         Control    ADC       ‐             Schematic
+------ --------- ---------------- ------- --------- ----------- -------------------
+Ctrl   Function  Type               GPIO  Addr Chan Resistor    CTL Pin    ADC Chan
+====== ========= ================ ======= ==== ==== =========== ========== ========
+**B0** Bat V     `VoltageMonitor`    ‐    0x48  1   ‐           ‐          B0_O+B_V
+**B0** Charge    `ChargeMonitor`    16    0x48  2   `BC0_CH_R`  B0_CH_CTL  B0_CH_C
+**B0** Discharge `ChargeMonitor`    18    0x48  0   `BC0_DCH_R` B0_DCH_CTL B0_DCH_C
+**B1** Bat V     `VoltageMonitor`    ‐    0x49  3   ‐           ‐          B1_O+B_V
+**B1** Charge    `ChargeMonitor`    33    0x49  2   `BC1_CH_R`  B1_CH_CTL  B1_CH_C
+**B1** Discharge `ChargeMonitor`    35    0x48  3   `BC1_DCH_R` B1_DCH_CTL B1_DCH_C
+**B2** Bat V     `VoltageMonitor`    ‐    0x49  0   ‐           ‐          B2_O+B_V
+**B2** Charge    `ChargeMonitor`    37    0x4A  0   `BC2_CH_R`  B2_CH_CTL  B2_CH_C
+**B2** Discharge `ChargeMonitor`    39    0x49  1   `BC2_DCH_R` B2_DCH_CTL B2_DCH_C
+**B3** Bat V     `VoltageMonitor`    ‐    0x4A  2   ‐           ‐          B3_O+B_V
+**B3** Charge    `ChargeMonitor`    40    0x4A  3   `BC3_CH_R`  B3_CH_CTL  B3_CH_C
+**B3** Discharge `ChargeMonitor`    38    0x4A  1   `BC3_DCH_R` B3_DCH_CTL B3_DCH_C
+====== ========= ================ ======= ==== ==== =========== ========== ========
 
 
 Attributes:
@@ -272,6 +264,17 @@ from i2c_config import const, i2c
 
 from lib.ads1x15 import ADS1115
 
+from shunt_conf import (
+    BC0_CH_R,
+    BC1_CH_R,
+    BC2_CH_R,
+    BC3_CH_R,
+    BC0_DCH_R,
+    BC1_DCH_R,
+    BC2_DCH_R,
+    BC3_DCH_R,
+)
+
 # Pins used on the S2 Mini. See docstring Attributes for more.
 PIN_LED = 15
 
@@ -300,10 +303,30 @@ LOAD_R = 8
 
 # Config for all battery controllers
 HARDWARE_CFG = [
-    ("BC0", (0x48, 1, 5), (16, 0x48, 2, 1, None), (18, 0x48, 0, LOAD_R, None)),
-    ("BC1", (0x49, 3, 5), (33, 0x49, 2, 1, None), (35, 0x48, 3, LOAD_R, None)),
-    ("BC2", (0x49, 0, 5), (37, 0x4A, 0, 1, None), (39, 0x49, 1, LOAD_R, None)),
-    ("BC3", (0x4A, 2, 5), (40, 0x4A, 3, 1, None), (38, 0x4A, 1, LOAD_R, None)),
+    (
+        "BC0",
+        (0x48, 1, 5),
+        (16, 0x48, 2, BC0_CH_R, None),
+        (18, 0x48, 0, BC0_DCH_R, None),
+    ),
+    (
+        "BC1",
+        (0x49, 3, 5),
+        (33, 0x49, 2, BC1_CH_R, None),
+        (35, 0x48, 3, BC1_DCH_R, None),
+    ),
+    (
+        "BC2",
+        (0x49, 0, 5),
+        (37, 0x4A, 0, BC2_CH_R, None),
+        (39, 0x49, 1, BC2_DCH_R, None),
+    ),
+    (
+        "BC3",
+        (0x4A, 2, 5),
+        (40, 0x4A, 3, BC3_CH_R, None),
+        (38, 0x4A, 1, BC3_DCH_R, None),
+    ),
 ]
 
 # Default spike detection thresholds and times for voltage spike detection.
