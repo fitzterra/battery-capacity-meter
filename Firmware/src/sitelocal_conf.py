@@ -207,7 +207,7 @@ def updateLocal(names: str | list, conf_mod):
     if local_f in os.listdir():
         with open(local_f, "r", encoding="utf-8") as cf:
             while ln := cf.readline():
-                var = ln.split(" ", maxsplit=1)[0]
+                var = ln.split(" ")[0]
                 if not var in to_update:
                     out += ln
                 else:
