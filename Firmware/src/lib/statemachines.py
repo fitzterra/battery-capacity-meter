@@ -92,8 +92,7 @@ class BCStateMachine:
         E_ch_done: Event: Charging is done.
 
             When a `BatteryController._chargeSpike` is detected and the
-            `BatteryController._bat_v_track` voltage is greater than
-            `C_VOLTAGE_TH`
+            `BatteryController._v_mon` voltage is greater than `C_VOLTAGE_TH`
 
         E_dch_done: Event: Discharging is done.
 
@@ -444,7 +443,7 @@ class SoCStateMachine:
         uid: A unique ID to identify this SoC Measurement.
 
             This is usefull to group event records together later. It will be
-            an 8 character lowercase hex string like: `'5044d5c4'`
+            an 8 character lowercase hex string like: ``5044d5c4``
 
         state: This will be the current state as defined by the various
             ``ST_???`` constants.
