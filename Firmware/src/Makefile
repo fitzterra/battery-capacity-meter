@@ -96,6 +96,7 @@ MPY_SRC = boot.py \
 		  net_conf.py \
 		  i2c_config.py \
 		  config.py \
+		  shunt_conf.py \
 		  structures.py \
 		  telemetry.py \
 		  ui/__init__.py \

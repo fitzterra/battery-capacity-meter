@@ -33,8 +33,10 @@ class Menu(Screen):
                          ('Sub 2.3', (
                                        ('Sub-sub 2.3.1', Screen),
                                        ('Sub-sub 2.3.2', Screen),
+                                       ('Exit', None),
                                      )
                          ),
+                         ('Back', None),
                        )
             ),
             ('Item 3', Screen),
@@ -59,8 +61,8 @@ class Menu(Screen):
     * Any one menu can be as long as it needs to be, and will scroll up and
       down if it does not fit on the screen.
     * If the menu action (second menu definition element) is not a `Screen`
-      type, it is assumed to be a sub-menu, and will have a ``>`` at the end of
-      line to show this is a sub-menu.
+      type, but rather a sub-menu, it will have a ``>`` at the end of line to
+      show this is a sub-menu.
     * The currently selected item will be highlighted in reverse video.
     * Control is currently only by rotary encoder and rotating clockwise will
       move down the menu, while rotating counter-clockwise will move up. This
@@ -76,6 +78,10 @@ class Menu(Screen):
         * For any other type, an error will be logger.
     * A long press of the encoder button will return to the parent menu from a
       sub-menu.
+    * Another way to exit a sub-menu is to have a menu entry with one of these
+      names: 'Exit', 'Back', 'Return' (case does not matter), and the second
+      item in the tuple set to None. A single click on this item will simulates
+      a long press which will return to the parent if there is a parent.
 
     Attributes:
         _menu_def: Set from the ``menu`` arg to `__init__`.
@@ -368,6 +374,12 @@ class Menu(Screen):
                 logging.info("Passing focus to %s", self._focus_on_exit)
                 self._passFocus(None)
 
+            return
+
+        # Simulate a long press if the action item is None and the lower cased
+        # menu item is one of the following:
+        if act_item is None and menu_item.lower() in ["exit", "return", "back"]:
+            self.actLong()
             return
 
         logging.error("Invalid menu action %s, for entry '%s'", act_item, menu_item)

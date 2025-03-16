@@ -309,10 +309,13 @@ class ADCMonitor:
             # calls that will be going to _spikeDetect. The buffer length
             # therefore is the allowed period divided by the _sample_delay
             self._spike_buf_len = ceil(spike_cfg.period / self._sample_delay)
-            # We initialize the buffer with one value which is the current init
-            # value. This way spike detection can start as soon as the asyncio
-            # loop starts and the first ADC sample is taken
-            self._spike_buf = [self._val]
+            # We initialize the buffer as empty so that the first value into
+            # the buffer is the first real ADC value. This means we will not
+            # get false spikes if the value is not 0.
+            # This may also mean that we will not detect a situation like the
+            # battery already inserted on startup, but this should be dealt
+            # with somewhere else.
+            self._spike_buf = []
 
         # This is the value to be used for spike detection, and the value the
         # spike threshold refers to. For raw ADC values this could be
