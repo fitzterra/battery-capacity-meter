@@ -36,13 +36,12 @@ from config import (
     D_V_RECOVER_TH,
     D_RECOVER_MAX_TM,
     D_RECOVER_MIN_TM,
-    TELEMETRY_LOOP_DELAY,
 )
 
 
 # This is a very simple signaling method to let the Telemetry task know it
 # needs to emit the telemetry for a specific BC.
-telemetry_trigger: list = []
+telemetry_trigger = []
 
 
 class BCStateMachine:
@@ -918,13 +917,22 @@ class SoCStateMachine:
         # for this BC. We do this by signaling it through the telemetry_trigger
         # list.
         telemetry_trigger.append(self._bc)
-        # We give the Telemetry emitter 6 changes to emit the telemetry data
-        for _ in range(6):
+        # We give the Telemetry emitter 20 * 100ms to emit the telemetry data
+        for _ in range(20):
             # To waste as little time as possible, we check the trigger every
-            # 1/4 TELEMETRY_LOOP_DELAY
-            await asyncio.sleep_ms(TELEMETRY_LOOP_DELAY // 4)
+            # 100ms
+            await asyncio.sleep_ms(100)
 
             # Has it been removed?
+            # TODO: There is a possible race condition here, in that we may have
+            #      added the BC, then the telemetry picked it up and emitted
+            #      the data. Then while we sleep above, another coro adds the
+            #      same BC to the telemetry_trigger trigger again.
+            #      In this case we will find it in there, and stay in the loop
+            #      for the wrong reason.
+            #      Worse, if we exit this loop the check below could then
+            #      remove that telemetry_trigger before it was emitted.
+            #      Multitasking is difficult!!
             if self._bc not in telemetry_trigger:
                 break
 

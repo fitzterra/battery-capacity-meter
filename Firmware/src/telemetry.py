@@ -31,7 +31,7 @@ from lib import ulogging as logging
 from lib.mqtt_as import MQTTClient, config
 from lib.bat_controller import BatteryController, telemetry_trigger
 import net_conf
-from config import TELEMETRY_LOOP_DELAY
+from config import TELEMETRY_EMIT_FREQ
 
 
 async def clientUp(client):
@@ -207,69 +207,67 @@ async def broadcast(bcs: list[BatteryController,]):
     client = MQTTClient(config)
     await client.connect()
 
-    # While we wait, we start the event tasks.
+    # Start the event tasks.
     for task in (clientUp, clientDown, messages):
         asyncio.create_task(task(client))
 
-    stats = {bc.name: {"state": None, "bat_v": None} for bc in bcs}
+    # Keeps some state for each of the BCs
+    state = {
+        bc.name: {
+            "state": None,
+            "bat_v": None,
+            "next_emit": time.ticks_add(time.ticks_ms(), TELEMETRY_EMIT_FREQ),
+        }
+        for bc in bcs
+    }
 
     while True:
-        for next_bc in bcs:
-            start = time.ticks_ms()
-            while (
-                time.ticks_diff(time.ticks_ms(), start) < TELEMETRY_LOOP_DELAY
-                and not telemetry_trigger
+        # We sleep a short time here to be fairly responsive to changes to be
+        # emitted
+        await asyncio.sleep_ms(100)
+
+        # Check if we have any BCs that needs telemetry emitted
+        for bc in bcs:
+            # If this bc was already added as a trigger from an external
+            # process, we skip any further checks - it will get an emit run
+            if bc in telemetry_trigger:
+                continue
+
+            # There are a number of conditions that can cause telemetry data to
+            # be emitted. This is n if statement with all these conditions. If
+            # any one of them are true for this BC, we mark the BC for
+            # telemetry emission.
+            if (
+                # Anytime a status changes - compared with our saved state
+                (state[bc.name]["state"] != bc.state)
+                # When in S_BAT_ID state (after dis/charge) the battery voltage
+                # takes time to stabilize. We keep record of the voltage in the
+                # BC state structure and then check for changes.
+                or (bc.state == bc.S_BAT_ID and bc.bat_v != state[bc.name]["bat_v"])
+                # When in one of the continues emit states (dis/charging), and emit time is reached
+                or (
+                    bc.state in [bc.S_CHARGE, bc.S_DISCHARGE]
+                    and time.ticks_diff(time.ticks_ms(), state[bc.name]["next_emit"])
+                    > 0
+                )
             ):
-                await asyncio.sleep_ms(20)
+                telemetry_trigger.append(bc)
 
-            # In case we have any BCs in telemetry_trigger, we will transfer
-            # all of them to a new list, and include the current BCM we need
-            # to emit telemetry data for. We then cycle through our new list and
-            # emit the data. This way we also clear any triggers added before.
-            emit_list = []
-            while telemetry_trigger:
-                # Clear off telemetry_trigger and add to emit_list
-                emit_list.append(telemetry_trigger.pop(0))
+        # Now emit any telemetry for any BC that are ready
+        for _ in range(len(telemetry_trigger)):
+            # Remove it from the trigger list
+            bc = telemetry_trigger.pop(0)
 
-            # Now add the current bc
-            emit_list.append(next_bc)
+            # State updates:
+            # Set it's next emit time
+            state[bc.name]["next_emit"] = time.ticks_add(
+                time.ticks_ms(), TELEMETRY_EMIT_FREQ
+            )
+            # Update the state
+            state[bc.name]["state"] = bc.state
+            # And the battery voltage
+            state[bc.name]["bat_v"] = bc.bat_v
 
-            # Emit all their telemetry data
-            for bc in emit_list:
-                st = stats[bc.name]
-                topic = msg = None
-
-                # If the state had changed from the last we have in the stat
-                # history, or we are charging or discharging, we emit a
-                # message
-                if st["state"] != bc.state or bc.state in [
-                    bc.S_CHARGE,
-                    bc.S_DISCHARGE,
-                ]:
-                    # Set the history state and battery voltages to the current
-                    # state and voltage
-                    st["state"] = bc.state
-                    st["bat_v"] = bc.bat_v
-                    # Build the message we want to send.
-                    msg = buildMsg(bc)
-
-                # While in Bat+ID state, the battery voltage may change arger a
-                # charge or discharge cycles. This allows us a view in how the
-                # battery recovers, so we want to publish these battery changes
-                # when it does, but once it has stabilized, we want to stop
-                # sending the messages.
-                # To do this, we store the battery voltage in the "bat_v" key
-                # history for the BC. If we are in S_BAT_ID state and the
-                # voltages has changed, we publish after saving the new
-                # voltage.
-                # If we just changed to the S_BAT_ID state, msg would already
-                # have been set to show the initial S_BAT_ID state, so we then
-                # do not do a second check for this state.
-                if msg is None and bc.state == bc.S_BAT_ID:
-                    if bc.bat_v != st["bat_v"]:
-                        st["bat_v"] = bc.bat_v
-                        msg = buildMsg(bc)
-
-                if msg:
-                    topic = f"{net_conf.MQTT_PUB_TOPIC}/{bc.name}"
-                    await client.publish(topic, json.dumps(msg), qos=0)
+            msg = buildMsg(bc)
+            topic = f"{net_conf.MQTT_PUB_TOPIC}/{bc.name}"
+            await client.publish(topic, json.dumps(msg), qos=0)

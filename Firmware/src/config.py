@@ -371,13 +371,9 @@ D_RECOVER_TEMP = 40
 D_RECOVER_MIN_TM = 3 * 60
 
 ##### Telemetry config #####
-# The amount of time to sleep in the telemetry detection loop.
-# On each loop cycle, one BC is checked for a state change, and if so,
-# telemetry is reported.
-# Since the BCs are done one after the other with this amount of delay between
-# each, the total time between telemetry updates per BC will be the number of
-# BCs x this value.
-TELEMETRY_LOOP_DELAY = 250
+# For continues telemetry emission states like charging and discharging, this is
+# the frequency (in milliseconds) with which to emit telemetry updates.
+TELEMETRY_EMIT_FREQ = 5000
 
 ##### SoC Measurement config ####
 # The amount of time to rest after a charge or discharge complete to allow the
@@ -386,15 +382,3 @@ SOC_REST_TIME = 5 * 60
 
 # The number of cycles to run for a SoC measurement
 SOC_NUM_CYCLES = 2
-
-# While doing the SoC measure, when the BC changes to the S_CHARGED or
-# S_DISCHARGED stated, we want o delay the SoC FSM from moving on the next
-# state to give the telemetry monitor time to see and report the final charged
-# state. This is needed because the telemetry monitor runs at it's own pace in
-# it's own task and we do not have any synchronisation between the two.
-# Since we do not know at what point the telemetry loop the change happened, we
-# delay the SoC state change by at least 2 twice the time it would have taken
-# the telemetry loop to have reported the BC change.
-# TODO: Add async synchronization between the telemetry monitor and the SoC
-# task to sync this update instead of doing this best guess calculation here.
-TELEMETRY_WAIT = 2 * TELEMETRY_LOOP_DELAY * len(HARDWARE_CFG)
