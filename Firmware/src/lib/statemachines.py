@@ -883,37 +883,8 @@ class SoCStateMachine:
                     cycle_start = time.ticks_ms()
                     continue
 
-                # TODO:
-                # We've had failures where the battery voltage is at 2892mv
-                # after reaching the recovery time. This is 2mV below the
-                # recovery voltage threshold.
-                # We need to calculate the recovery percentage in this case
-                # as:
-                #
-                #  RECOV_PER = current_voltage * 1000 / D_V_RECOVER_TH
-                #
-                # If this percentage is greater than 80%, we need to find a way
-                # to extend the recovery time. Perhaps in this case we do not
-                # extend the recovery time since this means yet another
-                # constant because we are driven by the cycles time, but we
-                # then allow to extend the recovery time by say 20%, i.e.:
-                # If we have reached the recovery time, and we are > 80% to the
-                # recovery threshold, the we calculate the percentage we are
-                # past the recovery time:
-                #
-                #  OVER_TIME_PER = self.cycle_tm * 100 / D_RECOVER_MIN_TM
-                #
-                # If OVER_TIME_PER is less than 120%, we continue the wait for
-                # the recovery.
-                # We need to find a way to signal that this happening with a
-                # log or something, so may be a flag that we set or something
-                # to indicate that we have entered this condition..
-
-                # If we have exceeded the max rest time, then the battery is
-                # probably not going to recover, so we want to stop the SoC
-                # measurement.
                 if self.cycle_tm >= D_RECOVER_MAX_TM:
-                    logging.info(
+                    logging.error(
                         "%s: Battery voltage did not recover after "
                         "discharge and additional resting. "
                         "Aborting SoC measure.",
