@@ -36,16 +36,20 @@ class Menu(Screen):
                                        ('Exit', None),
                                      )
                          ),
+                         ('Sub 2.4', myfunc),  # callable with no args
                          ('Back', None),
                        )
             ),
             ('Item 3', Screen),
             ('Item 4', Screen),
+            ('Item 5', myfunc, "boo", 7),  # callable with two additional args
         )
 
-    Each entry is a 2-tuple with the first element being the menu name entry to
-    display, and the second element a `Screen` instance, or another tuple for a
-    sub-menu.
+    Each entry is at the minimum a 2-tuple with the first element being the menu
+    name entry to display, and the second element a `Screen` instance, another
+    tuple for a sub-menu, or a callable. For a callable, any additional tuple
+    elements will be taken as arguments to pass to the callable. See the
+    `Calling a function`_ section below for more details.
 
     Notes and functionality:
 
@@ -75,6 +79,13 @@ class Menu(Screen):
           to return focus to the menu on exit.
         * If it is a tuple, it will be assumed to be a sub-menu definition and will
           jump into the sub-menu.
+        * If it is a callable. it will be called passing the current menu name,
+          a reference to this `Screen` / `Menu` instance and any additional
+          arguments from the definition. See the `Calling a function`_ section
+          below for more.
+        * If it's ``None`` and the lowercase menu name is "exit", "return" or
+          "back", `actLong()` will be called to simulate a long press to return
+          to the parent.
         * For any other type, an error will be logger.
     * A long press of the encoder button will return to the parent menu from a
       sub-menu.
@@ -83,10 +94,63 @@ class Menu(Screen):
       item in the tuple set to None. A single click on this item will simulates
       a long press which will return to the parent if there is a parent.
 
+    Calling a function
+    ~~~~~~~~~~~~~~~~~~
+
+    The menu item can also call any callable when clicked. This requires the
+    menu definition to have a callable, and optional arguments, to pass to the
+    function as the 2nd and subsequent elements in the tuple definitions- see
+    above.
+
+    This is useful to dynamically create a new `Screen` or perhaps a
+    `FieldEdit` to update a config value or set any dynamic value, and then
+    return to the calling `Menu` on exit.
+
+    The signature for the callable is as below, with an example of how to chain
+    to another dynamically generated screen, such as the `FieldEdit` screen
+
+    .. python::
+
+        def myfunc(menu_name, screen, *args):
+            '''
+            Dynamically generate screen from menu
+
+            Args:
+                menu_name: The menu item name as displayed - also the 1st
+                    element in the menu entry def for this callable.
+                screen: A reference to the calling `Menu` instance as an
+                    extended `Screen` instance.
+                args: Any additional args defined in the menu definition for
+                    this menu item.
+            '''
+
+            def setConfigVal(val, _):
+                '''
+                Saves the updated config value
+
+                Ignores the fieldID value passed as second arg.
+                '''
+                # Here we will update the config from the new val received from
+                # the field editor
+
+            editor = FieldEdit(
+                menu_name,
+                screen.px_w,
+                screen.px_h,
+                # Get the item value to edit from config using the menu name
+                # label
+                val=getattr(config, menu_name),
+                f_type="num",
+                setter=setConfigVal,
+            )
+            # Pass focus to the field editor
+            screen._passFocus(conf_editor, return_to_me=True)
+
+
     Attributes:
         _menu_def: Set from the ``menu`` arg to `__init__`.
         _curr: Set to the current menu or sub-menu withing the `_menu_def`
-            hierarchy we are currently displaying. Will be updated the user
+            hierarchy we are currently displaying. Will be updated as the user
             navigates into and out of sub-menus and screens.
         _selected: Index into the current menu entries list for the
             currently selected entry on the screen. Updated as the encoder is
@@ -354,7 +418,7 @@ class Menu(Screen):
             return
 
         if callable(act_item):
-            # It's a callable. We expect to be bale to pass the current menu
+            # It's a callable. We expect to be able to pass the current menu
             # item name, a reference to this Screen/Menu instance, and any
             # additional optional arguments the item definition may have.
             logging.debug(

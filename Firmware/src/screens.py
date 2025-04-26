@@ -36,6 +36,8 @@ from config import (
     OLED_W,
     OLED_H,
 )
+import config
+from sitelocal_conf import updateLocal
 
 # from interface import MODE_CHARGING, MODE_DISCHARGING
 from version import VERSION
@@ -908,6 +910,107 @@ class Calibration(Screen):
         self._setupCalibration()
 
 
+def updateConfig(conf_name, screen, *args):
+    """
+    `Menu` callable to update a specific config value and save it as a config
+    local value.
+
+    Due to space constraints on the display, this is fairly crude
+    functionality.
+
+    We expect the menu item name to be a config constant name from `config`.
+    These menu entries are then defined to all call here when selected, where
+    we will get the `config` constant name as first arg, and the `Menu`
+    instance as second (screen) arg.
+
+    We will simply dynamically generate a new `FieldEdit` screen using the menu
+    name (``conf_name``) as the field label, and the value from `config` and allow the value to
+    be updated. Once updated, we will save it as a site local value to persist
+    it for future uses.
+
+    .. warning::
+
+        Only numeric constants can be update currently. This may be changed
+        later to allow passing in the field type as an additional argument to
+        the callable.
+
+    To avoid crashes, we check to see if the config name is an attribute of
+    `config`, and if not, log an error and simply return. Note that in this
+    case there is no user feedback or notice of this error - bad UX.
+
+    Furthermore, many of the constants in `config` are quite long
+    (`TELEMETRY_EMIT_FREQ`, `D_RECOVER_MIN_TM`, etc.) and will thus not fit in
+    on the small OLED display. They will be truncated on the display, but still
+    function correctly as constant names. The display truncation is also bad
+    UX, which means that the user would probably need a list of all constant
+    names and their type and purpose before being able to use this
+    functionality completely.
+
+    .. warning::
+
+        When updating an attribute directly in a module, any other objects that
+        have imported that module directly will see the update.
+
+        If however, the attribute was imported directly from the module, then
+        updating it in the module will not update the directly imported value.
+
+        This may cause a number of strange situations depending on how
+        different modules access imported config values. Best would be a
+        restart after updating config values.
+
+    """
+    logging.info("Config update request for config: '%s'", conf_name)
+
+    # Make sure the config option is an attribute of config.
+    if not hasattr(config, conf_name):
+        logging.error(
+            "No config constant named '%s' to update the value for.", conf_name
+        )
+        return
+
+    def setConfigVal(val: bytearray, _):
+        """
+        Saves the new value.
+
+        Args:
+            val: The updated value. This is a ``bytearray``, and for now we
+                expect all values to be integers, so we need to convert it to int.
+            _: This is the ignored field ID from the menu.
+        """
+        try:
+            val = int(val)
+        except Exception as ex:
+            logging.error(
+                "Error converting %s to int for setting the `%s' config value. Error: %s",
+                val,
+                conf_name,
+                ex,
+            )
+            return
+
+        logging.info("Setting site local config: %s=%s", conf_name, val)
+
+        # Update in the module - NOTE this does not update any directly
+        # imported attributes!
+        setattr(config, conf_name, val)
+
+        # Now save it as a site local
+        updateLocal(conf_name, config)
+
+    # Create a new FieldEdit screen to update the setting
+    conf_editor = FieldEdit(
+        conf_name,
+        screen.px_w,
+        screen.px_h,
+        val=getattr(config, conf_name),
+        f_type="num",
+        setter=setConfigVal,
+    )
+    # Pass focus to the field editor
+    # pylint: disable=protected-access
+    screen._passFocus(conf_editor, return_to_me=True)
+
+
 class BCMView(Screen):
     """
     Views and controls Battery Capacity Meter modules.
@@ -1632,6 +1735,21 @@ class BCMView(Screen):
             logging.info("Received invalid option from footer menu: %s", opt)
 
 
+# All config options we allow updating at runtime and setting locally.
+RUNTIME_CONF = (
+    ("C_VOLTAGE_TH", updateConfig),
+    ("D_VOLTAGE_TH", updateConfig),
+    ("D_V_RECOVER_TH", updateConfig),
+    ("D_RECOVER_MAX_TM", updateConfig),
+    ("D_RECOVER_TEMP", updateConfig),
+    ("D_RECOVER_MIN_TM", updateConfig),
+    ("TELEMETRY_EMIT_FREQ", updateConfig),
+    ("SOC_REST_TIME", updateConfig),
+    ("SOC_NUM_CYCLES", updateConfig),
+    ("Back", None),
+)
+
+
 def uiSetup(bcms: list):
     """
     Sets up the UI.
@@ -1675,6 +1793,7 @@ def uiSetup(bcms: list):
             "Config",
             (
                 ("Calibration", Calibration("Calibration", OLED_W, OLED_H, bcms)),
+                ("Runtime Config", RUNTIME_CONF),
                 ("Back", None),
             ),
         ),

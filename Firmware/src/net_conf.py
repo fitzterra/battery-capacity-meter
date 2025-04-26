@@ -25,7 +25,7 @@ Attributes:
     MQTT_PORT: The port on `MQTT_HOST` to connect to. May be overridden from a
         site local config.
     MQTT_PUB_TOPIC: This is the base topic used to publish state messages on.
-        `BatteryController.name` will be appended to the topic to make unique
+        ``BatteryController.name`` will be appended to the topic to make unique
         topics per battery controller name.
     MQTT_CTL_TOPIC: This is the topic to subscribe to for MQTT control messages.
     MQTT_DEBUG: If True, the `mqtt_as` module will print verbose output that

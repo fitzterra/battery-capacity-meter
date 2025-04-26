@@ -255,6 +255,18 @@ Attributes:
         voltage is below this threshold, then we generate fully discharged
         event.
 
+    D_RECOVER_MAX_TM: The max time we will allow for recovery after a discharge.
+
+        If the recovery conditions are not met in this period, we will assume
+        the battery is not a good state.
+
+    D_RECOVER_TEMP: Once we bring in temperature measurement, this will be the
+        recovery temp we expect the battery to be at.
+
+    D_RECOVER_MIN_TM: Since we do not have battery temperature measurement
+        currently, we will use a min rest time instead. This must be less than
+        D_RECOVER_TM
+
 .. _ADS1115: https://components101.com/modules/ads1115-module-with-programmable-gain-amplifier
 .. _TP4056: https://components101.com/modules/tp4056a-li-ion-battery-chargingdischarging-module
 .. _DW01: https://www.best-microcontroller-projects.com/support-files/dw01a.pdf
@@ -274,6 +286,8 @@ from shunt_conf import (
     BC2_DCH_R,
     BC3_DCH_R,
 )
+
+from sitelocal_conf import overrideLocal
 
 # Pins used on the S2 Mini. See docstring Attributes for more.
 PIN_LED = 15
@@ -362,7 +376,7 @@ D_V_RECOVER_TH = 2900
 # The max time we will allow for recovery after a discharge. If the recovery
 # conditions are not met in this period, we will assume the battery is not a
 # good state.
-D_RECOVER_MAX_TM = 5 * 60
+D_RECOVER_MAX_TM = 7 * 60
 # Once we bring in temperature measurement, this will be the recovery temp we
 # expect the battery to be at.
 D_RECOVER_TEMP = 40
@@ -382,3 +396,7 @@ SOC_REST_TIME = 5 * 60
 
 # The number of cycles to run for a SoC measurement
 SOC_NUM_CYCLES = 2
+
+
+# Override any site local values
+overrideLocal(__name__, locals())

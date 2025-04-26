@@ -644,8 +644,8 @@ class BatteryController(BCStateMachine):
 
         The test for complete will be done every 100ms (hardcoded for now).
 
-        Once discharge is complete, this coro will generate an `E_dch_done`
-        event and exit.
+        Once discharge is complete, this coro will generate a
+        `BCStateMachine.E_dch_done` event and exit.
         """
         logging.info("%s: Starting discharge monitor.", self._bc_prefix)
 
