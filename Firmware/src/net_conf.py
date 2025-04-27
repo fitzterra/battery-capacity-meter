@@ -2,7 +2,7 @@
 Network and related configs module.
 
 This module contains the required configs for the WiFi and MQTT access
-credentials as used by the `state_broadcast` and `net_conn` modules.
+credentials as used by the `telemetry` and `net_conn` modules.
 
 It is used by various other modules that needs access to this config.
 
@@ -25,7 +25,7 @@ Attributes:
     MQTT_PORT: The port on `MQTT_HOST` to connect to. May be overridden from a
         site local config.
     MQTT_PUB_TOPIC: This is the base topic used to publish state messages on.
-        `BatteryController.name` will be appended to the topic to make unique
+        ``BatteryController.name`` will be appended to the topic to make unique
         topics per battery controller name.
     MQTT_CTL_TOPIC: This is the topic to subscribe to for MQTT control messages.
     MQTT_DEBUG: If True, the `mqtt_as` module will print verbose output that
@@ -40,6 +40,7 @@ HOSTNAME: str | None = "bcm"
 MQTT_HOST: str = ""
 MQTT_PORT: int = 1883
 MQTT_PUB_TOPIC: str = "BCM/state"
+MQTT_LOG_TOPIC: str = "BCM/log"
 MQTT_CTL_TOPIC: str = "BCM/ctl/#"
 MQTT_DEBUG: bool = False
 

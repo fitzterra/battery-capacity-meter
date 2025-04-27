@@ -3,7 +3,7 @@ Module to connect and handle network connections if not using the `Asynchronous
 MQTT`_ module.
 
 Note:
-    The `state_broadcast` module uses `Asynchronous MQTT`_ for broadcasting
+    The `telemetry` module uses `Asynchronous MQTT`_ for broadcasting
     battery status and will thus use the `mqtt_as` module for both handling the
     network connection as well as the MQTT connection.
     This means that this module will not be used in production, but is still

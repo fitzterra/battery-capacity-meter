@@ -11,12 +11,14 @@ Attributes:
     https://docs.micropython.org/en/latest/library/framebuf.html#framebuf.FrameBuffer.ellipse
 """
 
+# We do have much to do here, so
+# @pylint: disable=too-many-lines
+
 import gc
 from micropython import const
 from machine import Pin
 from ssd1306 import SSD1306_I2C
 from lib import ulogging as logging
-from lib.utils import genBatteryID
 from lib.bat_controller import BatteryController
 from ui import (
     Screen,
@@ -34,6 +36,8 @@ from config import (
     OLED_W,
     OLED_H,
 )
+import config
+from sitelocal_conf import updateLocal
 
 # from interface import MODE_CHARGING, MODE_DISCHARGING
 from version import VERSION
@@ -45,158 +49,6 @@ Q1 = const(0b0001)
 Q2 = const(0b0010)
 Q3 = const(0b0100)
 Q4 = const(0b1000)
-
-
-class Boot(Screen):
-    """
-    Boot screen.
-
-    It only shows some boot info and then uses the base button press
-    functionality to allow exiting the screen.
-
-    Attributes:
-        num_bcms: Set from the ``bcms`` arg to `__init__`.
-    """
-
-    # We are just extending this class, @pylint: disable=too-few-public-methods
-
-    def __init__(self, name: str, px_w: int, px_h: int, bcms: int) -> None:
-        """
-        Overrides init to accept the number of BCMs available.
-
-        We expect the ``name`` arg be something like "BCM vx.y.z" as this will
-        be shown as the screen header and the version number is expected to be
-        shown there.
-
-        Args:
-            name, px_w, px_h: See `Screen.__init__`
-            bcms: The number of BCMs available.
-        """
-        super().__init__(name, px_w, px_h)
-        self.num_bcms = bcms
-
-    def _drawLogo(self, x: int, y: int, rad: int = 12, show: bool = False):
-        """
-        Draws the logo centered at x,y.
-
-        Args:
-            x, y: The center pixel coordinates for the logo
-            rad: The logo radius
-            show: If True, the display will be updated to show the change.
-                Default is to not update the display.
-        """
-        # Draws the right side half outer circle filled
-        self._display.ellipse(x, y, rad, rad, 1, True, Q1 | Q4)
-        # A smaller full circle in the center also filled
-        self._display.ellipse(x, y, rad // 4, rad // 4, 1, True)
-        # Clear out the right half of the small center circle
-        self._display.ellipse(x, y, rad // 4, rad // 4, 0, True, Q1 | Q4)
-
-        if show:
-            self._show()
-
-    def setup(self):
-        """
-        Shows the screen.
-        """
-        self._clear()
-        # Show the name as centered header
-        self.nameAsHeader(fmt="^")
-
-        self._display.text(f"BCMs: {self.num_bcms}", 0, 2 * self.FONT_W)
-        self._display.text(f"{'Click to start..':^16}", 0, 7 * self.FONT_W)
-        # Draw the logo centered in x, and y center (rad = 12) +1 pixel above
-        # bottom line (line height = 8)
-        rad = 12
-        self._drawLogo((self.px_w - 1) // 2, self.px_h - 1 - self.FONT_W - (rad + 1))
-
-        self._show()
-
-
-class MemoryUsage(Screen):
-    """
-    Displays the current memory usage.
-
-    Attributes:
-        AUTO_REFRESH: Enable auto refresh every this many ms
-        ALLOC_Y: Text row number to display the amount of memory allocated
-            metric
-        FREE_Y: Text row number to display the amount of free memory metric
-        FREE_P_Y: Text row number to display the free memory percentage metric
-    """
-
-    # The auto refresh rate
-    AUTO_REFRESH = 1000
-
-    # The text line numbers where will display each metrics
-    ALLOC_Y = 3
-    FREE_Y = 5
-    FREE_P_Y = 7
-
-    def setup(self):
-        """
-        Set the screen up.
-        """
-        self._clear()
-        # Show the Screen name centered in line 0
-        self.nameAsHeader(fmt="^")
-
-        self._display.text("Allocated:", 0, (self.ALLOC_Y - 1) * 8)
-        self._display.text("Free:", 0, (self.FREE_Y - 1) * 8)
-
-        self.update()
-
-        # Call out base's setup to auto start a task for auto refreshing the
-        # display - this task will be exited once we loose focus
-        super().setup()
-
-    def update(self):
-        """
-        Updates the display.
-        """
-
-        alloc = gc.mem_alloc()
-        free = gc.mem_free()
-        perc = free * 100 / (alloc + free)
-        # First clear the alloc and free lines to white
-        self._clearTextLine(self.ALLOC_Y, 1)
-        self._clearTextLine(self.FREE_Y, 1)
-        self._clearTextLine(self.FREE_P_Y, 0)
-        # Update with the new values. We display them 4 pixel in from the edge
-        # for a slightly better view
-        self._display.text(f"{alloc} bytes", 4, self.ALLOC_Y * self.FONT_H, 0)
-        self._display.text(f"{free} bytes", 4, self.FREE_Y * self.FONT_H, 0)
-        self._display.text(f"{perc:.2f}% free", 0, self.FREE_P_Y * self.FONT_H)
-
-        self._show()
-
-
-class Config(Screen):
-    """
-    Config screen
-    """
-
-    def setup(self):
-        """
-        Set the screen up.
-        """
-        self._clear()
-        # Show the Screen name centered in line 0
-        self.nameAsHeader(fmt="^")
-
-        self.text("To be done...", fmt="^w", y=3)
-
-        self.update()
-
-        # Call out base's setup to auto start a task for auto refreshing the
-        # display - this task will be exited once we loose focus
-        super().setup()
-
-    def update(self):
-        """
-        Updates the display.
-        """
-        self._show()
 
 
 class FootMenu:
@@ -437,6 +289,728 @@ class FootMenu:
         cb(opt[self.OPT_OPT])
 
 
+class Boot(Screen):
+    """
+    Boot screen.
+
+    It only shows some boot info and then uses the base button press
+    functionality to allow exiting the screen.
+
+    Attributes:
+        num_bcms: Set from the ``bcms`` arg to `__init__`.
+    """
+
+    # We are just extending this class, @pylint: disable=too-few-public-methods
+
+    def __init__(self, name: str, px_w: int, px_h: int, bcms: int) -> None:
+        """
+        Overrides init to accept the number of BCMs available.
+
+        We expect the ``name`` arg be something like "BCM vx.y.z" as this will
+        be shown as the screen header and the version number is expected to be
+        shown there.
+
+        Args:
+            name, px_w, px_h: See `Screen.__init__`
+            bcms: The number of BCMs available.
+        """
+        super().__init__(name, px_w, px_h)
+        self.num_bcms = bcms
+
+    def _drawLogo(self, x: int, y: int, rad: int = 12, show: bool = False):
+        """
+        Draws the logo centered at x,y.
+
+        Args:
+            x, y: The center pixel coordinates for the logo
+            rad: The logo radius
+            show: If True, the display will be updated to show the change.
+                Default is to not update the display.
+        """
+        # Draws the right side half outer circle filled
+        self._display.ellipse(x, y, rad, rad, 1, True, Q1 | Q4)
+        # A smaller full circle in the center also filled
+        self._display.ellipse(x, y, rad // 4, rad // 4, 1, True)
+        # Clear out the right half of the small center circle
+        self._display.ellipse(x, y, rad // 4, rad // 4, 0, True, Q1 | Q4)
+
+        if show:
+            self._show()
+
+    def setup(self):
+        """
+        Shows the screen.
+        """
+        self._clear()
+        # Show the name as centered header
+        self.nameAsHeader(fmt="^")
+
+        self._display.text(f"BCMs: {self.num_bcms}", 0, 2 * self.FONT_W)
+        self._display.text(f"{'Click to start..':^16}", 0, 7 * self.FONT_W)
+        # Draw the logo centered in x, and y center (rad = 12) +1 pixel above
+        # bottom line (line height = 8)
+        rad = 12
+        self._drawLogo((self.px_w - 1) // 2, self.px_h - 1 - self.FONT_W - (rad + 1))
+
+        self._show()
+
+
+class MemoryUsage(Screen):
+    """
+    Displays the current memory usage.
+
+    Attributes:
+        AUTO_REFRESH: Enable auto refresh every this many ms
+        ALLOC_Y: Text row number to display the amount of memory allocated
+            metric
+        FREE_Y: Text row number to display the amount of free memory metric
+        FREE_P_Y: Text row number to display the free memory percentage metric
+    """
+
+    # The auto refresh rate
+    AUTO_REFRESH = 1000
+
+    # The text line numbers where will display each metrics
+    ALLOC_Y = 3
+    FREE_Y = 5
+    FREE_P_Y = 7
+
+    def setup(self):
+        """
+        Set the screen up.
+        """
+        self._clear()
+        # Show the Screen name centered in line 0
+        self.nameAsHeader(fmt="^")
+
+        self._display.text("Allocated:", 0, (self.ALLOC_Y - 1) * 8)
+        self._display.text("Free:", 0, (self.FREE_Y - 1) * 8)
+
+        self.update()
+
+        # Call out base's setup to auto start a task for auto refreshing the
+        # display - this task will be exited once we loose focus
+        super().setup()
+
+    def update(self):
+        """
+        Updates the display.
+        """
+
+        alloc = gc.mem_alloc()
+        free = gc.mem_free()
+        perc = free * 100 / (alloc + free)
+        # First clear the alloc and free lines to white
+        self._clearTextLine(self.ALLOC_Y, 1)
+        self._clearTextLine(self.FREE_Y, 1)
+        self._clearTextLine(self.FREE_P_Y, 0)
+        # Update with the new values. We display them 4 pixel in from the edge
+        # for a slightly better view
+        self._display.text(f"{alloc} bytes", 4, self.ALLOC_Y * self.FONT_H, 0)
+        self._display.text(f"{free} bytes", 4, self.FREE_Y * self.FONT_H, 0)
+        self._display.text(f"{perc:.2f}% free", 0, self.FREE_P_Y * self.FONT_H)
+
+        self._show()
+
+
+class Calibration(Screen):
+    """
+    Calibration Screen.
+
+    This screen is used to adjust the shunt resistor used for ``charge`` or
+    ``discharge`` current calculations. The idea is that a multimeter is
+    connecting in series with the battery and set to current monitoring.
+
+    The shunt resistor is then adjusted on screen until the calculated current
+    matches the current displayed on the multimeter.
+
+    This screen provides the following:
+
+    * Show a short help message on startup with a footer menu listing all
+      available BCs that can be calibrated, and an ``Exit`` menu option.
+    * Only BCs that have a battery inserted, but no ID has been set for it yet,
+      can be calibrated.
+    * Once a BC is selected, the calibration selection screen is displayed.
+    * This is also a screen with a quick help message, and then a footer
+      menu to select ``charge`` or ``discharge`` calibration, with an
+      ``Exit`` option to return to the BC selection screen.
+    * Once the calibration option is selected, the screen changes to
+      display the current **shunt** resistor value, as well as the current
+      charge or discharge current.
+    * Rotating the encoder will adjust the shunt resistor value by 0.1Ω
+      increments and the dis/charge current will auto update to based on
+      the shunt value change.
+    * The display and multimeter currents are compared until the display
+      matches the multimeter.
+
+    Attributes:
+
+        AUTO_REFRESH: Sets the auto refresh rate for the screen.
+
+        S_SEL_BC: State: Selecting a BC to calibrate
+        S_SEL_CALIB: State: Selecting to calibrate charging or discharging
+        S_CALIB: State: Busy calibrating
+
+        C_CH: Indicator that charge calibration is in progress
+        C_DCH: Indicator that discharge calibration is in progress
+
+        _bcms: Set to the list `BatteryController` instances received in
+            `__init__`.
+        _state: The current calibration state. One of `S_SEL_BC`, `S_SEL_CALIB`
+            or `S_CALIB`
+        _foot_menu: The `FootMenu` currently in operation, or None if no footer
+            menu is currently active.
+        _cal_opt: The current calibration option. One of `C_CH` or `C_DCH`
+        _bc: The current `BatteryController` selected for calibration, or
+            ``None`` if not selected yet.
+        _curr_mon: Pointer to `BatteryController._ch_mon` or
+            `BatteryController._dch_mon` for the BC set in `_bc`.
+
+            This is set as a shortcut to this current monitor while in
+            calibration mode.
+
+        _shunt_row: The display row on which to put the shunt value display
+            while in calibration mode.
+    """
+
+    # pylint: disable=too-many-instance-attributes
+
+    # Refresh every 200 millis
+    AUTO_REFRESH = 200
+
+    # Various internal states
+    S_SEL_BC = 0  # Select BC
+    S_SEL_CALIB = 1  # Select what to calibrate
+    S_CALIB = 2  # Calibration in progress
+
+    # Current calibration option
+    C_CH = 0  # Charge calibration
+    C_DCH = 1  # Discharge calibration
+
+    def __init__(self, name: str, px_w: int, px_h: int, bcms: list[BatteryController]):
+        """
+        Overrides base init.
+
+        Args:
+            name, px_w, px_h:  See `Screen` base class documentation.
+            bcms: List of `BatteryController` instance to calibrate.
+        """
+        super().__init__(name, px_w, px_h)
+
+        self._bcms = bcms
+
+        self._state: int = self.S_SEL_BC
+        self._foot_menu: FootMenu | None = None
+        self._cal_opt: int | None = None
+        self._bc: BatteryController | None = None
+        self._curr_mon: "CurrentMonitor" | None = None
+        self._shunt_row = 2
+
+    def _setupSelectBC(self):
+        """
+        Called to set up for selecting the BC to calibrate.
+
+        This method will clear the screen, show the BC selection help text and
+        set up the footer menu to select the BC.
+
+        It will also set the `_state` to `S_SEL_BC`.
+        """
+        # Clear the screen, leaving the header in tact.
+        self._clear(header_lns=1)
+
+        self.text("Select the BC with battery to calibrate", "w^", 0, 2)
+
+        # Only add BCs that have a battery inserted but have not set an ID yet
+        opts = [
+            (str(i), f"Calibrate {bc.name}")
+            for i, bc in enumerate(self._bcms)
+            if bc.state == bc.S_GET_ID
+        ]
+        opts.append(("Exit", "Exit calibration"))
+        # Set up the footer menu
+        self._foot_menu = FootMenu(
+            self,
+            opts,
+            self.footMenuCB,
+        )
+        self._foot_menu.drawMenu()
+
+        self._state = self.S_SEL_BC
+
+    def _setupSelectCalibrate(self):
+        """
+        Called to set up for selecting the calibration option.
+
+        This method will clear the screen, show the calibration selection help
+        text and set up the footer menu to select the calibration option.
+
+        It will also set the `_state` to `S_SEL_CALIB`.
+        """
+        # Clear the screen, leaving the header in tact.
+        self._clear(header_lns=1)
+
+        self.text("Select calibration option.", "w^", 0, 2)
+
+        # Only add BCs that have a battery inserted but have not set an ID yet
+        opts = [
+            ("Ch", "Charging"),
+            ("DCh", "Discharging"),
+            ("Exit", "Exit calibration"),
+        ]
+        # Set up the footer menu
+        self._foot_menu = FootMenu(
+            self,
+            opts,
+            self.footMenuCB,
+        )
+        self._foot_menu.drawMenu()
+
+        self._state = self.S_SEL_CALIB
+
+    def _setupCalibration(self):
+        """
+        Sets up for calibration.
+
+        This method will clear the screen, show the shunt label and resistor
+        value, as well as the the dis/charge current label.
+
+        It will then switch on charging or discharging as required and set the
+        `_state` to `S_CALIB`.
+
+        From here the `update` method will update the shunt and current values.
+        """
+        # Clear the screen, leaving the header in tact.
+        self._clear(header_lns=1)
+
+        # Set a pointer to the correct charge/current monitor in the selected
+        # BC for easier access
+        self._curr_mon = getattr(
+            self._bc, "_ch_mon" if self._cal_opt == self.C_CH else "_dch_mon"
+        )
+
+        # Instructions at the bottom of the display.
+        self.text("Rotate to change, press to save.", "w<", 0, self._max_rows - 2)
+
+        # The shunt and current display
+        self.text(f"Shunt: {self._shunt}", "<", 0, self._shunt_row)
+        self.text("Curnt: ", "<", 0, self._shunt_row + 1)
+
+        # Start charging or discharing
+        self._bc._cdControl(
+            state=True, ch=self._cal_opt == self.C_CH, dch=self._cal_opt == self.C_DCH
+        )
+
+        self._state = self.S_CALIB
+
+    @property
+    def _shunt(self):
+        """
+        Property to return the shunt resistor value for the BC being calibrated.
+
+        We get the shunt value from `_curr_mon` which is set up in
+        `_setupCalibration`.
+
+        Returns:
+            The shunt resistor value or None if `_curr_mon` is ``None``.
+        """
+        if self._curr_mon is None:
+            return None
+
+        # It's OK to access the private value here @pylint: disable=protected-access
+        return self._curr_mon._shunt
+
+    @_shunt.setter
+    def _shunt(self, val: int | float):
+        """
+        Setter for the current BC's charge monitor shunt value.
+
+        Note:
+            This is an adjuster for the current shunt, and not an absolute
+            value setter. The ``val`` passed in will be added to the current
+            shunt value, thus adjusting it either up or down (when ``val`` is
+            negative)
+
+        Args:
+            val: A positive or negative integer or float by which to adjust the
+                shunt value
+        """
+        self._curr_mon._shunt += val
+        # We can not let this value go equal to or below zero
+        if self._shunt <= 0:
+            logging.error("Screen %s: Shunt value can not go below zero.", self.name)
+            # Return to previous
+            self._curr_mon._shunt -= val
+
+    def _saveCalibration(self):
+        """
+        Save the value that have now been calibrated.
+
+        This function will import `shunt_conf`, then use the ``name`` attribute
+        of the current BC (`_bc`) and whether we are calibrating charging or
+        discharging, to construct the shut resistor config name as:
+
+            BCn_CH_R   # Charge calibration
+
+        or
+
+            BCn_DCH_R  # Discharge calibration
+
+        where ``BCn`` comes from the `_bc` ``name`` attribute.
+
+        This config variable is then set to the current `_shunt` value in
+        `shunt_conf`, after which `sitelocal_conf.updateLocal` is called to
+        save this shunt config value to a site local config file.
+
+        These saved values will then later be applied when constructing
+        `config.HARDWARE_CFG` from imports from `shunt_conf` and this site
+        local config file.
+        """
+        try:
+            # We only import these when needed
+            # pylint: disable=import-outside-toplevel
+            import shunt_conf
+            from sitelocal_conf import updateLocal
+
+            # Build up the config value based on how it is expected in
+            # shunt_conf.py
+            conf_name = (
+                f"{self._bc.name}_{'D' if self._cal_opt == self.C_DCH else ''}CH_R"
+            )
+
+            setattr(shunt_conf, conf_name, self._shunt)
+
+            updateLocal(conf_name, shunt_conf)
+        except Exception as exc:
+            logging.error(
+                "Screen %s: Error saving local calibrated shunt.  Error: %s",
+                self.name,
+                exc,
+            )
+            return
+
+        logging.info(
+            "Screen %s: Saved calibration %s=%s to site local shunt_conf_local.py",
+            self.name,
+            conf_name,
+            self._shunt,
+        )
+
+    def setup(self):
+        """
+        Set the screen up.
+
+        This method is called on first initializing the screen.
+
+        It clears the screen, adds a header and goes into the BC selection
+        state by calling `_setupSelectBC`.
+        """
+        self._clear()
+        # Show the Screen name centered in line 0
+        self.nameAsHeader(fmt="^")
+        self._invertText(0, 0)
+
+        self._setupSelectBC()
+
+        self.update()
+
+        # Call out base's setup to auto start a task for auto refreshing the
+        # display - this task will be exited once we loose focus
+        super().setup()
+
+    def update(self):
+        """
+        Continuously updates the display.
+
+        While in the calibration `_state` (`S_CALIB`), this method will update
+        the battery current and shunt value display on every call.
+        """
+        # Update values when calibrating
+        if self._state == self.S_CALIB:
+            # Clear the block to the right of the labels. The X pos is
+            # hardcoded here since it's a fairly fixed width.
+            self._display.rect(
+                6 * self.FONT_W,
+                self._shunt_row * self.FONT_H,
+                self._display.width - 6 * self.FONT_W,
+                (self._shunt_row + 1) * self.FONT_H,
+                0,
+                True,
+            )
+            # Update shunt value
+            self._display.text(
+                f"{self._shunt:0.1f} ohm",
+                7 * self.FONT_W,
+                self._shunt_row * self.FONT_H,
+                1,
+            )
+            # Update current value
+            self._display.text(
+                f"{self._curr_mon.current} mA",
+                7 * self.FONT_W,
+                (self._shunt_row + 1) * self.FONT_H,
+                1,
+            )
+
+        self._show()
+
+    def actCCW(self):
+        """
+        Overrides the base counter-clockwise encoder rotation event.
+
+        We override this so that we can update the shunt value (`_shunt`) or
+        any footer menu selection (`_foot_menu`) on encoder rotation.
+
+        If in `S_CALIB` `_state`, we subtract 0.1Ω from the `_shunt`, else if
+        `_foot_menu` is active, we update the selected option.
+
+        If no footer menu is active, we pass the call up to the parent.
+        """
+        # When we're calibrating CCW rotation decreases the shunt value by one
+        if self._state == self.S_CALIB:
+            self._shunt = -0.10
+            # Update immediately to give instant feedback
+            self.update()
+            return
+
+        if self._foot_menu is None:
+            super().actCCW()
+            return
+
+        logging.info("Screen %s: Selecting previous footer menu option.", self.name)
+        self._foot_menu.selectNext(-1)
+
+    def actCW(self):
+        """
+        Overrides the base clockwise encoder rotation event.
+
+        We override this so that we can update the shunt value (`_shunt`) or
+        any footer menu selection (`_foot_menu`) on encoder rotation.
+
+        If in `S_CALIB` `_state`, we add 0.1Ω to the `_shunt`, else if
+        `_foot_menu` is active, we update the selected option.
+
+        If no footer menu is active, we pass the call up to the parent.
+        """
+        # When we're calibrating CW rotation increases the shunt value by one
+        if self._state == self.S_CALIB:
+            self._shunt = 0.10
+            # Update immediately to give instant feedback
+            self.update()
+            return
+
+        if self._foot_menu is None:
+            super().actCW()
+            return
+
+        logging.info("Screen %s: Selecting next footer menu option.", self.name)
+        self._foot_menu.selectNext(1)
+
+    def actShort(self):
+        """
+        Overrides the base short press event.
+
+        We override this so that we can save the updated shunt value or
+        select the current footer menu selection if a footer is active.
+
+        If in `S_CALIB` `_state`, we save the current shunt value, else if
+        `_foot_menu` is active, we select the current option.
+
+        If no footer menu is active, we pass the call up to the parent.
+        """
+        # If we're calibrating, this click means we are exiting.
+        if self._state == self.S_CALIB:
+            logging.info("Screen %s: Completed calibration.", self.name)
+            # Switch off both charge and discharge controllers.
+            # It's OK to use _cdControl here @pylint: disable=protected-access
+            self._bc._cdControl(state=False, ch=True, dch=True)
+
+            # Save the calibrated value
+            self._saveCalibration()
+
+            # Reset the current monitor pointer and return to selecting the
+            # option to calibrate
+            self._curr_mon = None
+            self._setupSelectCalibrate()
+            return
+
+        if self._foot_menu is None:
+            super().actShort()
+            return
+
+        logging.info("Screen %s: Activating selected footer menu option.", self.name)
+        self._foot_menu.activate()
+
+    def actLong(self):
+        """
+        Overrides the base long press event.
+
+        We override this so that we can unset the foot menu, and then call up
+        to the super.
+
+        If in `S_CALIB` `_state`. we ignore this long press.
+        """
+        # Ignore this if we're busy calibrating
+        if self._state == self.S_CALIB:
+            logging.error(
+                "Screen %s: Ignoring long press while calibrating.", self.name
+            )
+            return
+
+        self._foot_menu = None
+        super().actLong()
+
+    def footMenuCB(self, opt: str):
+        """
+        Footer menu callback function.
+
+        This is a callback set for any dynamic `FootMenu` instances we set up
+        (see `_foot_menu`) for any running state.
+
+        When called, `_foot_menu` will be set to ``None`` to effectively
+        disable the footer menu since an option has now been selected.
+
+        If the ``opt`` is ``"Exit"``, then we exit the current Screen by doing
+        a call to `actShort()`, effectively simulating a short press to exit
+        the screen.
+
+        For all other options we call the appropriate handler, sometimes also
+        based on the state. See the code for more details.
+
+        Args:
+            opt: The foot menu option string that was active when the option
+                was selected.
+        """
+        # First thing to do is unset the current footer menu
+        self._foot_menu = None
+
+        # Are we exiting?
+        if opt == "Exit":
+            # Simulate the exit by calling the shortpress now that _foot_menu
+            # is None.
+            self.actShort()
+            return
+
+        # We deal with opt value differently depending on the state we're in
+        if self._state == self.S_SEL_BC:
+            # The opt value is an index into self._bcms, but is a string.
+            # Convert to int and set pointer to local BC being used
+            self._bc = self._bcms[int(opt)]
+            logging.info(
+                "Screen %s: Going to calibrate BC: %s",
+                self.name,
+                self._bc.name,
+            )
+
+            self._setupSelectCalibrate()
+            return
+
+        # We're in the calibration selection state, with one of the calibration
+        # options selected.
+        self._cal_opt = self.C_CH if opt == "Ch" else self.C_DCH
+        self._setupCalibration()
+
+
+def updateConfig(conf_name, screen, *args):
+    """
+    `Menu` callable to update a specific config value and save it as a config
+    local value.
+
+    Due to space constraints on the display, this is fairly crude
+    functionality.
+
+    We expect the menu item name to be a config constant name from `config`.
+    These menu entries are then defined to all call here when selected, where
+    we will get the `config` constant name as first arg, and the `Menu`
+    instance as second (screen) arg.
+
+    We will simply dynamically generate a new `FieldEdit` screen using the menu
+    name (``conf_name``) as the field label, and the value from `config` and allow the value to
+    be updated. Once updated, we will save it as a site local value to persist
+    it for future uses.
+
+    .. warning::
+
+        Only numeric constants can be update currently. This may be changed
+        later to allow passing in the field type as an additional argument to
+        the callable.
+
+    To avoid crashes, we check to see if the config name is an attribute of
+    `config`, and if not, log an error and simply return. Note that in this
+    case there is no user feedback or notice of this error - bad UX.
+
+    Furthermore, many of the constants in `config` are quite long
+    (`TELEMETRY_EMIT_FREQ`, `D_RECOVER_MIN_TM`, etc.) and will thus not fit in
+    on the small OLED display. They will be truncated on the display, but still
+    function correctly as constant names. The display truncation is also bad
+    UX, which means that the user would probably need a list of all constant
+    names and their type and purpose before being able to use this
+    functionality completely.
+
+    .. warning::
+
+        When updating an attribute directly in a module, any other objects that
+        have imported that module directly will see the update.
+
+        If however, the attribute was imported directly from the module, then
+        updating it in the module will not update the directly imported value.
+
+        This may cause a number of strange situations depending on how
+        different modules access imported config values. Best would be a
+        restart after updating config values.
+
+    """
+    logging.info("Config update request for config: '%s'", conf_name)
+
+    # Make sure the config option is an attribute of config.
+    if not hasattr(config, conf_name):
+        logging.error(
+            "No config constant named '%s' to update the value for.", conf_name
+        )
+        return
+
+    def setConfigVal(val: bytearray, _):
+        """
+        Saves the new value.
+
+        Args:
+            val: The updated value. This is a ``bytearray``, and for now we
+                expect all values to be integers, so we need to convert it to int.
+            _: This is the ignored field ID from the menu.
+        """
+        try:
+            val = int(val)
+        except Exception as ex:
+            logging.error(
+                "Error converting %s to int for setting the `%s' config value. Error: %s",
+                val,
+                conf_name,
+                ex,
+            )
+            return
+
+        logging.info("Setting site local config: %s=%s", conf_name, val)
+
+        # Update in the module - NOTE this does not update any directly
+        # imported attributes!
+        setattr(config, conf_name, val)
+
+        # Now save it as a site local
+        updateLocal(conf_name, config)
+
+    # Create a new FieldEdit screen to update the setting
+    conf_editor = FieldEdit(
+        conf_name,
+        screen.px_w,
+        screen.px_h,
+        val=getattr(config, conf_name),
+        f_type="num",
+        setter=setConfigVal,
+    )
+    # Pass focus to the field editor
+    # pylint: disable=protected-access
+    screen._passFocus(conf_editor, return_to_me=True)
+
+
 class BCMView(Screen):
     """
     Views and controls Battery Capacity Meter modules.
@@ -447,7 +1021,7 @@ class BCMView(Screen):
     One instance is active at any time and a **long press** is used to cycling
     between the available instances.
 
-    The screen will update as the underlying `BatteryController.state` changes.
+    The screen will update as the underlying `BCStateMachine.state` changes.
     For example when no battery is inserted, the screen will show a message to
     this effect, then when the battery is inserted it will update to ask for
     the battery ID to be entered, and after that it will allow the battery to be
@@ -496,7 +1070,7 @@ class BCMView(Screen):
             The footer menu is dynamically defined depending on the screen
             we're on. It allows actions and navigation per screen.
 
-        _last_state: Holds the last `BatteryController.state` for `_bc`.
+        _last_state: Holds the last `BCStateMachine.state` for `_bc`.
 
             This is used in the `update` method to detect if there was a state
             change from the last to the current screen update.
@@ -537,11 +1111,17 @@ class BCMView(Screen):
 
     def _showHeader(self):
         """
-        Shows the current `BatteryController.name` as a header at the top of
+        Shows the current `BCStateMachine.name` as a header at the top of
         the screen and the battery ID if available.
 
-        This header is show inverted.
+        This header is shown inverted.
         """
+        # We are at time called to update the heade without having cleared the
+        # screen. In this case, if we do not always clear the header first, the
+        # invert further down is going to mess thngs up. So always clear the
+        # header line
+        self._display.fill_rect(0, 0, self.px_w, self.FONT_H, 0)
+
         header = f"{self._bc.name:^{self._max_cols}}"
         self._display.text(header, 0, 0, 1)
         self._invertText(0, 0)
@@ -553,6 +1133,12 @@ class BCMView(Screen):
             self._display.text(
                 f"{label}{self._bc.bat_id:>{id_w}.{id_w}}", 0, 1 * self.FONT_H, 1
             )
+
+        # If we are in a SoC measure state, add some SoC info
+        if self._bc.soc_m and self._bc.soc_m.in_progress:
+            self.text("#", x=0, y=0, color=0)
+            cyc = f"{self._bc.soc_m.cycle}/{self._bc.soc_m.cycles}"
+            self.text(cyc, x=self._max_cols - len(cyc), y=0, color=0)
 
     def _activateBCM(self, idx: int | str):
         """
@@ -607,7 +1193,7 @@ class BCMView(Screen):
 
     def _stDisabled(self):
         """
-        Handles updating the screen for the `BatteryController.S_DISABLED` state.
+        Handles updating the screen for the `BCStateMachine.S_DISABLED` state.
 
         We only display a message to indicate that we are disabled.
         """
@@ -623,7 +1209,7 @@ class BCMView(Screen):
 
     def _stNoBat(self):
         """
-        Handles updating the screen for the `BatteryController.S_NOBAT` state.
+        Handles updating the screen for the `BCStateMachine.S_NOBAT` state.
 
         We only display a message to indicate that we are waiting for a battery
         to be inserted.
@@ -654,7 +1240,7 @@ class BCMView(Screen):
 
     def _stGetID(self):
         """
-        Handles updating the screen for the `BatteryController.S_GET_ID` state.
+        Handles updating the screen for the `BCStateMachine.S_GET_ID` state.
 
         When we get here, the `BatteryController` has already created a default
         ID for the newly inserted battery, and this state is there to either
@@ -688,7 +1274,7 @@ class BCMView(Screen):
 
     def _stBatID(self):
         """
-        Handles updating the screen for the `BatteryController.S_BAT_ID` state.
+        Handles updating the screen for the `BCStateMachine.S_BAT_ID` state.
 
         This state only maintains an updated battery voltage, and a footer menu
         to allow for charging, discharging, etc.
@@ -705,6 +1291,7 @@ class BCMView(Screen):
             self._foot_menu = FootMenu(
                 self,
                 [
+                    ("SoC", "Measure SoC"),
                     ("Ch", "Start Charge"),
                     ("Dch", "Start Discharge"),
                     ("Exit", "Exit Screen"),
@@ -726,10 +1313,10 @@ class BCMView(Screen):
 
         We will be called for any of these states:
 
-        * `BatteryController.S_CHARGE`
-        * `BatteryController.S_DISCHARGE`
-        * `BatteryController.S_CHARGE_PAUSE`
-        * `BatteryController.S_DISCHARGE_PAUSE`
+        * `BCStateMachine.S_CHARGE`
+        * `BCStateMachine.S_DISCHARGE`
+        * `BCStateMachine.S_CHARGE_PAUSE`
+        * `BCStateMachine.S_DISCHARGE_PAUSE`
 
         Here we will display the current battery voltage, charge/discharge
         current and charge time. For discharge the current and mAh values are
@@ -763,12 +1350,18 @@ class BCMView(Screen):
 
         # Have we created the footer menu yet?
         if self._foot_menu is None:
-            logging.info(
+            logging.debug(
                 "Creating and showing footer menu for S_CHARGE/S_DISCHARGE state."
             )
-            # The footer menu options are different for paused and non-paused
-            # state
-            if not paused:
+            # The footer menu depends on whether we are busy with a SoC
+            # measurement, paused or just charging
+            if self._bc.soc_m.in_progress:
+                # We are busy with a SoC measurement
+                opts = [
+                    ("Cancel", "SoC Measure"),
+                    ("Exit", "Exit Screen"),
+                ]
+            elif not paused:
                 opts = [
                     ("Pause", f"Pause {'Charge' if charging else 'Discharge'}"),
                     ("Exit", "Exit Screen"),
@@ -824,7 +1417,8 @@ class BCMView(Screen):
         took to reach this state.
 
         A `FootMenu` will be available to allow resetting the controller and
-        metrics or exit the screen.
+        metrics, or cancelling an active SoC measure operation, or exit the
+        screen.
         """
         # Determine if we are charged or discharged
         # Set charging based of if we charging or discharging
@@ -834,18 +1428,35 @@ class BCMView(Screen):
         # battery ID, and footer menu if it is already there.
         self._clear(header_lns=2, footer_lns=2)
 
-        # Have we created the footer menu yet?
-        if self._foot_menu is None:
-            logging.info(
+        # Have we created the footer menu yet, or have the SoC measure
+        # cycle completed?
+        if (
+            self._foot_menu is None
+            or self._bc.soc_m.state == self._bc.soc_m.ST_COMPLETE
+        ):
+            logging.debug(
                 "Creating and showing footer menu for S_CHARGED/S_DISCHARGED state."
             )
+            # The footer menu is slightly different depending on this being a
+            # SoC measurement still in progress or a normal dis/charge complete
+            if (
+                self._bc.soc_m.in_progress
+                and self._bc.soc_m.state != self._bc.soc_m.ST_COMPLETE
+            ):
+                opts = [
+                    ("Cancel", "SoC Measure"),
+                    ("Exit", "Exit Screen"),
+                ]
+            else:
+                opts = [
+                    ("Reset", "Reset Metrics"),
+                    ("Exit", "Exit Screen"),
+                ]
+
             # Create the footer menu, and draw it
             self._foot_menu = FootMenu(
                 self,
-                [
-                    ("Reset", "Reset Metrics"),
-                    ("Exit", "Exit Screen"),
-                ],
+                opts,
                 self.footMenuCB,
             )
 
@@ -876,7 +1487,7 @@ class BCMView(Screen):
 
     def _stYanked(self):
         """
-        Handles updating the screen for the `BatteryController.S_YANKED` state.
+        Handles updating the screen for the `BCStateMachine.S_YANKED` state.
 
         It will show a message to indicate that the battery was removed anda
         `FootMenu` to allow resetting the controller or exiting the screen.
@@ -911,7 +1522,8 @@ class BCMView(Screen):
         there was a state change from the previous to current call, and then
         call the correct handler to manage the display for the given state.
         """
-        # We have a lot of flow here, so @pylint: disable=too-many-return-statements
+        # We have a lot of flow here, so
+        # @pylint: disable=too-many-return-statements,too-many-branches
 
         # If we do not have an active BCM set yet, we just return
         if self._active_bcm is None:
@@ -925,6 +1537,9 @@ class BCMView(Screen):
         # self._last_state to the current state.
         if state_changed := state != self._last_state:
             self._last_state = state
+            # If we are now in SoC measure progress, also update the header
+            if self._bc.soc_m and self._bc.soc_m.in_progress:
+                self._showHeader()
 
         # Disabled?
         if state == BatteryController.S_DISABLED:
@@ -1091,7 +1706,11 @@ class BCMView(Screen):
             # is None.
             self.actShort()
 
-        if opt == "Ch":
+        if opt in ("SoC", "Cancel"):
+            # These are to start or cancel a SoC measurement. For either we use
+            # the convenient toggle
+            self._bc.socMeasureToggle()
+        elif opt == "Ch":
             # Switch charging on
             self._bc.charge()
         elif opt == "Dch":
@@ -1116,6 +1735,21 @@ class BCMView(Screen):
             logging.info("Received invalid option from footer menu: %s", opt)
 
 
+# All config options we allow updating at runtime and setting locally.
+RUNTIME_CONF = (
+    ("C_VOLTAGE_TH", updateConfig),
+    ("D_VOLTAGE_TH", updateConfig),
+    ("D_V_RECOVER_TH", updateConfig),
+    ("D_RECOVER_MAX_TM", updateConfig),
+    ("D_RECOVER_TEMP", updateConfig),
+    ("D_RECOVER_MIN_TM", updateConfig),
+    ("TELEMETRY_EMIT_FREQ", updateConfig),
+    ("SOC_REST_TIME", updateConfig),
+    ("SOC_NUM_CYCLES", updateConfig),
+    ("Back", None),
+)
+
+
 def uiSetup(bcms: list):
     """
     Sets up the UI.
@@ -1129,7 +1763,7 @@ def uiSetup(bcms: list):
       ``bcms`` list.
     * The main `Menu` which consists of:
         * The `BCMView` entry
-        * A `Config` option for future config and setup from the UI
+        * A ``Config`` option for future config and setup from the UI
         * An entry for the `MemoryUsage` screen
     * The `Boot` Screen.
 
@@ -1152,18 +1786,17 @@ def uiSetup(bcms: list):
     # Set up the OLED
     oled = SSD1306_I2C(OLED_W, OLED_H, i2c, OLED_ADDR)
 
-    # # Setup the BCMView list menu definition using a generator expression to
-    # # create a menu definition tuple
-    # bcms_def = tuple(
-    #     (bcm.cfg.name, BCMView(bcm.cfg.name, OLED_W, OLED_H, bcm)) for bcm in bcms
-    # )
-    # # Now create the BCM list menu
-    # bcm_menu = Menu("BCMs", OLED_W, OLED_H, bcms_def, True)
-
     # Now we can dynamically create the main menu def
     main_menu_def = (
         ("BCMs View", BCMView("BCMView", OLED_W, OLED_H, bcms)),
-        ("Config", Config("Config", OLED_W, OLED_H)),
+        (
+            "Config",
+            (
+                ("Calibration", Calibration("Calibration", OLED_W, OLED_H, bcms)),
+                ("Runtime Config", RUNTIME_CONF),
+                ("Back", None),
+            ),
+        ),
         ("Memory usage", MemoryUsage("Memory Usage", OLED_W, OLED_H)),
     )
     main_menu = Menu("MainMenu", OLED_W, OLED_H, main_menu_def, True)
