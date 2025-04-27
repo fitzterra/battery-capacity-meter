@@ -57,9 +57,9 @@ class FieldEdit(Screen):
     The label will be displayed with the actual field input below that in
     inverse video. This will be the number of characters allowed in the field.
 
-    The default value will also be show in this field.
+    The default value will also be shown in this field.
 
-    Two *buttons*, ``OK`` and ``Cancel`` will be show at the bottom of the
+    Two *buttons*, ``OK`` and ``Cancel`` will be shown at the bottom of the
     screen.
 
     A cursor is shown as lines above and below the current character that is
@@ -155,7 +155,8 @@ class FieldEdit(Screen):
             f_type: The field type. One of the keys in `F_TYPES`, defaults to
                 ``"num"``
             setter: A function to call when OK is pressed to set the new value.
-                The setter only accepts the new value as argument.
+                See the callback function signature above in the `FieldEdit`
+                class docs.
             field_id: Can be used by the callback setter to identify the field
                 being set. Helpful when there is one setter callback for
                 multiple fields. Will be passed as the last arg to the setter

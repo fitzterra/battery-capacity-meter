@@ -39,7 +39,7 @@ Features
 --------
 
 The following are some of the features of this project:
-    * Hands-off measuring and history recording (see `Data Recording`_).
+    * Hands-off measuring and history recording (see `Telemetry Recording`_).
         * Once a test cycles is started, the battery will be fully charged.
         * From a fully charged state, one or more discharge/charge cycles can be
           started automatically to measure the SoC_.
@@ -48,8 +48,8 @@ The following are some of the features of this project:
       Bluetooth, etc.
     * Allows each battery to be given a unique ID which is used to keep a history
       of all tests and measurements over time.
-    * Live broadcasting of measurement data via MQTT.
-    * This data feed can then be recorded in a Database for the given battery ID.
+    * Live broadcasting of measurement data via MQTT. This data feed can then
+      be recorded in a Database for the given battery ID.
     * The following information is measured and broadcast in this way:
         * Battery ID
         * Charge/discharge cycle start and end
@@ -59,25 +59,27 @@ The following are some of the features of this project:
           holder, when the battery ID was set, if it was removed before or during a
           test cycle, and more.
     * Uses off the shelve components:
-        * TP4056_ charger module for charging and charge current measurement.
+        * TP4056_ charger module for charging and charge current measurement,
+          including the DW01_ battery protector on the board for battery
+          protection.
         * ADS1115_ 4 channel ADC for voltage/current measurements.
         * KY-040_ Rotary Encoder as user input
         * `SSD1306 OLED`_ for user output interface
         * `Wemos S2 Mini`_ ESP32 MCU running Micropython_
 
-Data Recording
---------------
+Telemetry Recording
+-------------------
 
 Since it takes a long time to charge and discharge a battery, this is a very
 tedious process for a human to monitor and record.
 
 Automating this process was the primary design goal for the BCM².
 
-The `state_broadcast` part of the BCM² firmware monitors the status of the
-`BatteryController` all the time. When certain events like battery inserted,
-battery removed, battery ID set, charging, discharging, cycle complete etc.
-happens, it will send a status message via MQTT_ on a specific topic
-(`net_conf.MQTT_PUB_TOPIC`).
+The `telemetry` part of the BCM² firmware monitors the status of the
+`BatteryController` all the time and reports this as telemetry events. When
+certain events like battery inserted, battery removed, battery ID set,
+charging, discharging, cycle complete etc.  happens, it will send a telemetry
+message via MQTT_ on a specific topic (`net_conf.MQTT_PUB_TOPIC`).
 
 From this it is then possible to record these messages into a database and by
 processing the information from there, one can build a history and status for
@@ -121,6 +123,7 @@ Due to the way blah, blah, blah....
 .. _SoC: https://www.batterydesign.net/battery-management-system/state-of-charge
 .. _`Coulomb Counting`: https://www.batterydesign.net/soc-estimation-by-coulomb-counting/
 .. _TP4056: https://components101.com/modules/tp4056a-li-ion-battery-chargingdischarging-module
+.. _DW01: https://www.best-microcontroller-projects.com/support-files/dw01a.pdf
 .. _ADS1115: https://components101.com/modules/ads1115-module-with-programmable-gain-amplifier
 .. _`SSD1306 OLED`: https://components101.com/displays/oled-display-ssd1306
 .. _KY-040: https://components101.com/modules/KY-04-rotary-encoder-pinout-features-datasheet-working-application-alternative

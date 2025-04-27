@@ -1,8 +1,6 @@
 """
 Battery Controller and State Machine module.
 
--------------------- from old charge_controller.py
-
 Module to control, monitor and keep track of the charge/discharging cycles for
 a Li-Ion battery.
 
@@ -23,11 +21,18 @@ Required external libs:
 .. _ads1x15: http://gitlab.gaul.za/tomc/micropython-ads1x15
 """
 
-from micropython import const
 import uasyncio as asyncio
+import utime as time
 from lib import ulogging as logging
 from lib.adc_monitor import VoltageMonitor, ChargeMonitor
-from lib.utils import genBatteryID, ewAverage
+from lib.statemachines import (  # pylint: disable=unused-import
+    BCStateMachine,
+    SoCStateMachine,
+    # We do not use this import here, but we import it as a convenience for the
+    # telemetry module that will use it.
+    telemetry_trigger,
+)
+from lib.utils import genBatteryID
 
 from i2c_config import Pin
 from config import (
@@ -46,329 +51,9 @@ from config import (
 from structures import ADCChannel, SpikeDetectCFG
 
 
-class StateMachine:
+class BatteryController(BCStateMachine):
     """
-    `Finite State Machine`_ to manage Battery Controller (`BatteryController`)
-    states and transitions.
-
-    State Diagram:
-
-    .. image:: ../../doc/design/BC_StateDiagram.drawio.png
-
-    See:
-        [../../doc/design/BC_StateMachine.md] for MermaidJS_ source for this
-        FSM
-
-    Attributes:
-
-        name: A name for the controller set on `__init__`
-
-        S_DISABLED: Statue: Battery controller disabled due to missing ADCs
-        S_NOBAT: Status: No Battery
-        S_BAT_NOID: Status: Battery, No ID
-        S_GET_ID: Status: Input Bat ID
-        S_BAT_ID: Status: Battery + ID
-        S_CHARGE: Status: Charging
-        S_DISCHARGE: Status: Discharging
-        S_CHARGE_PAUSE: Status: Charging Paused
-        S_DISCHARGE_PAUSE: Status: Disharging Paused
-        S_CHARGED: Status: Charge completed
-        S_DISCHARGED: Status: Disharge Completed
-        S_YANKED: Status: Battery removed
-
-        STATE_NAME: Human readable names for each of the above states.
-
-            Used by the `state_name` method to return the string name for a
-            given state.
-
-
-        E_disable: Event: Disables this controller and FSM.
-        E_init: Event: Initializes the FSM.
-        E_v_jump: Event: A `_voltageSpike` with rising voltage was detected.
-        E_v_drop: Event: A `_voltageSpike` with falling voltage was detected.
-        E_ch_jump: Event: A `_chargeSpike` with rising current was detected.
-        E_ch_drop: Event: A `_chargeSpike` with falling current was detected.
-        E_dch_jump: Event: A `_dischargeSpike` with rising current was detected.
-        E_dch_drop: Event: A `_dischargeSpike` with falling current was detected.
-        E_ch_done: Event: Charging is done.
-
-            When a `_chargeSpike` is detected and the `_bat_v_track` voltage is
-            greater than `C_VOLTAGE_TH`
-
-        E_dch_done: Event: Discharging is done.
-
-            When a `_dischargeSpike` is detected and the `_bat_v_track` voltage
-            is less than `D_VOLTAGE_TH`
-
-
-        E_charge: Event: Start charging. Called to switch on MOSFET on success
-        E_discharge: Event: Start discharging. Called to switch on MOSFET on success
-        E_pause: Event: Pause Charge or Discharge. Called to switch MOSFET on success
-        E_resume: Event: Resume Charge or Discharge. Called to switch MOSFET on success
-        E_reset: Event: Resets monitor after yank
-        E_get_id: Event: Event to indicate weare getting user input for the ID
-        E_set_id: Event: ID input complete and battery ID has been set.
-        E_reset_metrics: Event: Resets the metrics for a battery after halting charge/dischare
-
-        EVENT_NAME: A dictionary of event constants above as keys, and their
-            equivalent human readable event names as values.
-
-        TRANSITIONS: Describes the allowed transitions.
-
-            Each key is a status (``S_???``) describing the *from* state for a
-            transition.
-
-            The value is another dictionary where the key(s) is/are an event
-            definition (``E_???``) and the value is a destination *state*
-            (``ST_???``) this even should change the `state` to.
-
-            This dictionary defines all possible states and transitions as is
-            described in the state diagram above.
-
-        state: This will be the current state as defined by the various
-            ``S_???`` constants.
-
-            See:
-                `STATE_NAME` for a list of the states.
-
-    .. _`Finite State Machine`: https://en.wikipedia.org/wiki/Finite-state_machine
-    .. _MermaidJS: https://mermaid.js.org/
-    """
-
-    # Possible states - excluding the unknown state with value of None
-    # See Attributes docs in docstring
-    S_DISABLED = const(0)
-    S_NOBAT = const(1)
-    S_BAT_NOID = const(2)
-    S_GET_ID = const(3)
-    S_BAT_ID = const(4)
-    S_CHARGE = const(5)
-    S_DISCHARGE = const(6)
-    S_CHARGE_PAUSE = const(7)
-    S_DISCHARGE_PAUSE = const(8)
-    S_CHARGED = const(9)
-    S_DISCHARGED = const(10)
-    S_YANKED = const(11)
-
-    # State names that should be in the same order as the state definitions
-    # above. The state name is used as index into this list.
-    # NOTE: This excludes the unknown (None) state because I like to complicate
-    #       shit!
-    STATE_NAME: list = [
-        "Disabled",  # S_DISABLED
-        "No Battery",  # S_NOBAT
-        "Battery, No ID",  # S_BAT_NOID
-        "Awaiting Bat ID",  # S_GET_ID
-        "Battery+ID",  # S_BAT_ID
-        "Charging",  # S_CHARGE
-        "Discharging",  # S_DISCHARGE
-        "Charge Paused",  # S_CHARGE_PAUSE
-        "Discharge Paused",  # S_DISCHARGE_PAUSE
-        "Charged",  # S_CHARGED
-        "Discharged",  # S_DISCHARGED
-        "Yanked",  # S_YANKED
-    ]
-
-    # Possible events. See Attributes in docstring for documentation.
-    E_disable = const(100)
-    E_init = const(101)
-    E_v_jump = const(102)
-    E_v_drop = const(103)
-    E_ch_jump = const(104)
-    E_ch_drop = const(105)
-    E_dch_jump = const(106)
-    E_dch_drop = const(107)
-    E_ch_done = const(108)
-    E_dch_done = const(109)
-    E_charge = const(110)
-    E_discharge = const(111)
-    E_pause = const(112)
-    E_resume = const(113)
-    E_reset = const(114)
-    E_get_id = const(115)
-    E_set_id = const(116)
-    E_reset_metrics = const(117)
-
-    # Event ID names. See Attributes in docstring for documentation
-    EVENT_NAME: dict = {
-        E_disable: "E_disable",
-        E_init: "E_init",
-        E_v_jump: "E_v_jump",
-        E_v_drop: "E_v_drop",
-        E_ch_jump: "E_ch_jump",
-        E_ch_drop: "E_ch_drop",
-        E_dch_jump: "E_dch_jump",
-        E_dch_drop: "E_dch_drop",
-        E_ch_done: "E_ch_done",
-        E_dch_done: "E_dch_done",
-        E_charge: "E_charge",
-        E_discharge: "E_discharge",
-        E_pause: "E_pause",
-        E_resume: "E_resume",
-        E_reset: "E_reset",
-        E_get_id: "E_get_id",
-        E_set_id: "E_set_id",
-        E_reset_metrics: "E_reset_metrics",
-    }
-
-    # Valid transition definitions
-    TRANSITIONS: dict = {
-        None: {  # From: initial state
-            # To: Disabled state
-            E_disable: S_DISABLED,
-            # To: Initial state
-            E_init: S_NOBAT,
-        },
-        S_DISABLED: {},  # No transitions available from disabled
-        S_NOBAT: {  # From: no battery inserted
-            # To: Battery inserted on battery voltage jump
-            E_v_jump: S_BAT_NOID,
-        },
-        S_BAT_NOID: {  # From: Battery inserted, but waiting for an ID
-            # To: Getting the battery ID on a get_id event
-            E_get_id: S_GET_ID,
-            # To: Battery removed on voltage drop
-            E_v_drop: S_YANKED,
-        },
-        S_GET_ID: {  # From: Busy getting battery ID
-            # To: Set ID from user input on set_id event
-            E_set_id: S_BAT_ID,
-            # To: Yank while getting the ID
-            E_v_drop: S_YANKED,
-        },
-        S_BAT_ID: {  # From: Idle battery with ID
-            # To: Start Charging on charge event
-            E_charge: S_CHARGE,
-            # To: Start Discharging on discharge event
-            E_discharge: S_DISCHARGE,
-            # To: Yanked on voltage drop
-            E_v_drop: S_YANKED,
-        },
-        S_CHARGE: {  # From: Charging
-            # To: Pausing the charge on pause event
-            E_pause: S_CHARGE_PAUSE,
-            # To: Yank on ch_drop event
-            E_ch_drop: S_YANKED,
-            # To: Charge complete on ch_done event
-            E_ch_done: S_CHARGED,
-        },
-        S_CHARGE_PAUSE: {  # From: Charging paused
-            # To: Continue charging on resume event
-            E_resume: S_CHARGE,
-            # To: Reset metrics on reset_metrics event
-            E_reset_metrics: S_BAT_ID,
-            # To: Yank on v_drop event
-            E_v_drop: S_YANKED,
-        },
-        S_CHARGED: {  # From: Fully charged
-            # To: Reset metrics on reset_metrics event
-            E_reset_metrics: S_BAT_ID,
-            # To: Yank on v_drop event
-            E_v_drop: S_YANKED,
-        },
-        S_DISCHARGE: {  # From: Discharging
-            # To: Pausing the discharge pause event
-            E_pause: S_DISCHARGE_PAUSE,
-            # To:  Yank
-            E_dch_drop: S_YANKED,
-            # To: Discharge complete on dch_done event
-            E_dch_done: S_DISCHARGED,
-        },
-        S_DISCHARGE_PAUSE: {  # From: Charging
-            # To: Continue discharging on resume event
-            E_resume: S_DISCHARGE,
-            # To: Reset metrics on reset_metrics event
-            E_reset_metrics: S_BAT_ID,
-            # To: Yank on v_drop event
-            E_v_drop: S_YANKED,
-        },
-        S_DISCHARGED: {  # From: Fully discharged
-            # To: Reset metrics on reset_metrics event
-            E_reset_metrics: S_BAT_ID,
-            # To: Yank on v_drop event
-            E_v_drop: S_YANKED,
-        },
-        S_YANKED: {  # From: Battery removed
-            # To: Reset after yank
-            E_reset: S_NOBAT,
-            # To: Auto reset when inserting a battery while in yanked state
-            E_v_jump: S_BAT_NOID,
-        },
-    }
-
-    def __init__(self, name: str):
-        """
-        Instance init.
-
-        Args:
-            name: A name for this FSM. Usually linked to the what???
-
-        Attributes:
-            name: The battery controller name passes in to `__init__` as the
-            ``name`` arg.
-
-        TODO:
-             Complete docs
-        """
-        self.name: str = name
-        # We start off in the unknown state, and need to be initialized or
-        # disabled ASAP.
-        self.state: int | None = None
-
-    def __str__(self) -> str:
-        """
-        String representation of the instance.
-
-        Returns:
-            The FSM name.
-        """
-        return self.name
-
-    @property
-    def state_name(self) -> str:
-        """
-        Returns the current state as a string.
-        """
-        return self.STATE_NAME[self.state]
-
-    def transition(self, event: int) -> bool:
-        """
-        Call to transition to the next state.
-
-        Args:
-            event: Any of the ``E_???`` event constants defined for this class.
-
-        Side Effect:
-            On success `state` will be updated to the correct state based on
-            the current state and event.
-
-        Returns:
-            True if the transition was successful, False otherwise, with an
-            failure error logged.
-        """
-        # Check for valid transition
-        if event in self.TRANSITIONS[self.state]:
-            self.state = self.TRANSITIONS[self.state][event]
-            logging.info(
-                "%s (FSM): Transitioned to state: %s (%s)",
-                self,
-                self.state_name,
-                self.state,
-            )
-            return True
-
-        logging.error(
-            "%s (FSM): Invalid event %s from state %s",
-            self,
-            self.EVENT_NAME.get(event, event),
-            self.state_name,
-        )
-        return False
-
-
-class BatteryController(StateMachine):
-    """
-    A Battery Controller based on the `StateMachine` for managing and
+    A Battery Controller based on the `BCStateMachine` for managing and
     controlling these modules.
 
     A **BC** consists of the following:
@@ -407,7 +92,7 @@ class BatteryController(StateMachine):
     more details.
 
     The current controller state can be checked by various other attributes and
-    methods: `state`, `bat_v`, `bat_id`, `charge_vals`, `discharge_vals`.
+    methods: `BCStateMachine.state`, `bat_v`, `bat_id`, `charge_vals`, `discharge_vals`.
 
     Attributes:
 
@@ -423,8 +108,6 @@ class BatteryController(StateMachine):
             charging.
         _dch_mon: A `ChargeMonitor` as described above to monitor battery
             discharging.
-        _bat_v_track: Tracks the last few battery voltage readings to help
-            detect fully charge/discharged states.
     """
 
     # Do not worry @pylint: disable=too-many-instance-attributes
@@ -519,22 +202,95 @@ class BatteryController(StateMachine):
         # the monitors are disabled.
         if any(m._disabled for m in (self._v_mon, self._ch_mon, self._dch_mon)):
             self.transition(self.E_disable)
+            self.soc_m = None
             # Do not do anything further
             return
 
         # Not disabled, so we can transition to the initialized state.
         self.transition(self.E_init)
 
-        # Tracks the last few battery voltage readings to help detect fully
-        # charge/discharged states
-        self._bat_v_track: int = 0
+        # Set up a State of Charge monitor state machine
+        self.soc_m = SoCStateMachine(self)
 
-        # And start the battery voltage tracker
-        asyncio.create_task(self._trackBatV())
+    def __str__(self) -> str:
+        """
+        String representation of the instance.
+
+        Returns:
+            The BC name and state
+        """
+        return f"[BC::{self.name}] ({self.state_name})"
+
+    @property
+    def bat_v(self) -> int:
+        """
+        Property to return the current battery voltage.
+
+        Returns:
+            The battery voltage in mV.
+        """
+        return self._v_mon.voltage
+
+    @property
+    def bat_id(self) -> int:
+        """
+        Property to return the current battery ID.
+        """
+        return self._bat_id
+
+    @property
+    def charge_vals(self) -> tuple:
+        """
+        Property to return the current charging values as a tuple:
+
+        * 0 - Shunt resistor (R) value in ohm
+        * 1 - Voltage in mV (filtered)
+        * 2 - Current in mA (filtered)
+        * 3 - Charge in mC (filtered)
+        * 4 - Used charge in mAh (filtered)
+        * 5 - Charge time in seconds
+
+
+        Return:
+            (RΩ, mV, mA, mC, mAh, tm)
+        """
+        return (
+            self._ch_mon._shunt,  # pylint: disable=protected-access
+            self._ch_mon.voltage,
+            self._ch_mon.current,
+            self._ch_mon.charge,
+            self._ch_mon.mAh,
+            round(self._ch_mon.charge_time / 1000),
+        )
+
+    @property
+    def discharge_vals(self) -> tuple:
+        """
+        Property to return the current discharging values:
+
+        * 0 - Shunt resistor (R) value in ohm
+        * 1 - Voltage in mV (filtered)
+        * 2 - Current in mA (filtered)
+        * 3 - Charge in mC (filtered)
+        * 4 - Used charge in mAh (filtered)
+        * 5 - Charge time in seconds
+
+
+        Return:
+            (RΩ, mV, mA, mC, mAh, tm)
+        """
+        return (
+            self._dch_mon._shunt,  # pylint: disable=protected-access
+            self._dch_mon.voltage,
+            self._dch_mon.current,
+            self._dch_mon.charge,
+            self._dch_mon.mAh,
+            round(self._dch_mon.charge_time / 1000),
+        )
 
     def transition(self, event: int) -> bool:
         """
-        Overrides the `StateMachine.transition` method so we can apply certain
+        Overrides the `BCStateMachine.transition` method so we can apply certain
         actions on successful transitions.
 
         Returns:
@@ -583,35 +339,7 @@ class BatteryController(StateMachine):
         # As soon as get a new ID for a newly inserted battery, we reset all
         # old monitors.
         if self.state == self.S_BAT_ID:
-            # See below why we save the current battery voltage.
-            v_orig = self.bat_v
-
             self._resetMonitors()
-            # We may also get here when a very flat battery is discharged. The
-            # DW01 on the TP4056 disconnects the battery at around 2.4 volt
-            # during discharge, and keeps it disconnected until the battery
-            # voltage gets back to about 3.0V. For a battery with a very low
-            # charge this may not happen, or could take very long to happen,
-            # and we are then stuck in the S_DISCHARGED state. An
-            # E_reset_metrics event from that state will bring us here, because
-            # it is assumed the battery has now recovered to above the over
-            # discharge voltage.
-            # If however the voltage at this point is lower than D_VOLTAGE_TH,
-            # then it makes no sense to say we have a battery in the holder.
-            # In this case, we simulated a yanked battery to get to a yanked
-            # state.
-            # Note that the reset above would have reset the battery voltage by
-            # the time we get here to test, so we use the saved battery voltage
-            # from before the reset.
-            if v_orig < D_VOLTAGE_TH:
-                logging.info(
-                    "%s: Battery voltage too low (%smV) for this state. "
-                    "Simulating a yank event.",
-                    self._bc_prefix,
-                    v_orig,
-                )
-                return self.transition(self.E_v_drop)
-
             # Nothing failed here ,so we return True
             return True
 
@@ -628,6 +356,8 @@ class BatteryController(StateMachine):
         # When we transitioned to discharging, we need to switch the controller
         # on.
         if self.state == self.S_DISCHARGE:
+            # First start the discharge monitor
+            asyncio.create_task(self._dischargeMonitor())
             # NOTE: If our FSM is correct we should not ever get an error here.
             return self._cdControl(state=True, dch=True)
 
@@ -706,7 +436,7 @@ class BatteryController(StateMachine):
                     # monitor.
                     pin_t.value(0)
                     mon.pause()
-                # WE are switching off, so we can continue on to the next.
+                # We are switching off, so we can continue on to the next.
                 continue
 
             # We get here if we need to switch on. If this controller is not to
@@ -731,29 +461,6 @@ class BatteryController(StateMachine):
 
         return True
 
-    async def _trackBatV(self):
-        """
-        AsyncIO task that tracks an average of the battery voltage over a
-        small sample window to help with fully charged and discharged
-        detection.
-
-        When fully discharged, the DW01 protection chips disconnects the
-        battery which means that by the time the discharge callback is called,
-        we do not know what the battery voltage was, especially since the
-        voltage monitor is not guaranteed to use a filter to average the
-        voltage.
-
-        For this reason, we keep our own voltage average in `_bat_v_track`
-        using this coro that updates the average every 1/2 second over a 3
-        sample window.
-        """
-        self._bat_v_track = 0
-        alpha = 1 / 3  # 3 sample window
-
-        while True:
-            await asyncio.sleep_ms(500)
-            self._bat_v_track = ewAverage(alpha, self._v_mon.voltage, self._bat_v_track)
-
     def _voltageSpike(self, jump: bool, v_from: bool, v_to: bool):
         """
         Callback for when a battery voltage spike was detected.
@@ -767,11 +474,12 @@ class BatteryController(StateMachine):
             v_to: The value to which the jump occurred.
         """
         logging.info(
-            "%s: Voltage spike detected: %s (%s -> %s)",
+            "%s: Voltage spike detected: %s (%s -> %s = %sv)",
             self._bc_prefix,
             "jump" if jump else "drop",
             v_from,
             v_to,
+            v_to - v_from,
         )
         # Update the state if possible
         if not self.transition(self.E_v_jump if jump else self.E_v_drop):
@@ -800,7 +508,7 @@ class BatteryController(StateMachine):
             v_to,
         )
         # Did we reach the end of charge?
-        if self._bat_v_track > C_VOLTAGE_TH:
+        if self._v_mon.voltage > C_VOLTAGE_TH:
             if not self.transition(self.E_ch_done):
                 logging.error(
                     "%s: Unable to transition to fully charged.",
@@ -850,26 +558,13 @@ class BatteryController(StateMachine):
         .. _TP4056: https://components101.com/modules/tp4056a-li-ion-battery-chargingdischarging-module
         """
         logging.info(
-            "%s: Discharge spike detected: %s (%s -> %s, track_v: %s)",
+            "%s: Discharge spike detected: %s (%s -> %s, bat_v: %s)",
             self._bc_prefix,
             "jump" if jump else "drop",
             v_from,
             v_to,
-            self._bat_v_track,
+            self._v_mon.voltage,
         )
-        # Did we reach the end of discharge?
-        if self._bat_v_track < D_VOLTAGE_TH:
-            # Now we try transition to discharged state
-            if not self.transition(self.E_dch_done):
-                logging.error(
-                    "%s: Unable to transition to fully discharged.",
-                    self._bc_prefix,
-                )
-            else:
-                # Transition to fully discharged was successful, so we return.
-                # If it was not successful, we will try to make it go to
-                # dch_jump then.
-                return
 
         # Update the state if possible
         if not self.transition(self.E_dch_jump if jump else self.E_dch_drop):
@@ -889,11 +584,12 @@ class BatteryController(StateMachine):
         """
         Sets the battery ID.
 
-        This can only be done when in the `S_GET_ID` state.
+        This can only be done when in the `BCStateMachine.S_GET_ID` state.
 
         We set a default unique auto generated ID as soon as we go into the
-        `S_GET_ID` state (see `transition()`). To accept this ID, pass the
-        ``bat_id`` arg as None, else supply a max 10 character string as ID.
+        `BCStateMachine.S_GET_ID` state (see `BCStateMachine.transition()`). To
+        accept this ID, pass the ``bat_id`` arg as None, else supply a max 10
+        character string as ID.
 
         On success it will also transition to the next state.
 
@@ -926,7 +622,7 @@ class BatteryController(StateMachine):
         """
         Starts a charging cycle.
 
-        This is done with an `E_charge` `transition()`.
+        This is done with an `BCStateMachine.E_charge` `BCStateMachine.transition()`.
 
         Returns:
             True if the transition was successful.
@@ -938,11 +634,72 @@ class BatteryController(StateMachine):
         logging.error("%s: Unable to start charging.", self._bc_prefix)
         return False
 
+    async def _dischargeMonitor(self):
+        """
+        This coro is started for a discharge cycle, and monitors the battery
+        voltage to detect when discharge is complete.
+
+        Discharge is complete when the battery voltage (preferably using a
+        windowing average for transient filtering) reaches the `D_VOLTAGE_TH`.
+
+        The test for complete will be done every 100ms (hardcoded for now).
+
+        Once discharge is complete, this coro will generate a
+        `BCStateMachine.E_dch_done` event and exit.
+        """
+        logging.info("%s: Starting discharge monitor.", self._bc_prefix)
+
+        # When we get here it may be right after a monitor reset which means
+        # the voltage will not be correct. For this reason we pause here for a
+        # bit to get the voltage monitor to register the correct voltage
+        await asyncio.sleep_ms(1000)
+
+        # Monitor for discharge complete
+        while self._v_mon.voltage >= D_VOLTAGE_TH:
+            await asyncio.sleep_ms(100)
+
+        # Our voltage should slowly decrease, but we could be trigger if the
+        # battery is yanked and the voltage spike detector did not pick the
+        # spike up yet.
+        # So, now we monitor the state for the V_SPIKE_TH_T period and if we
+        # see the state change to Yanked, then we know it was the battery
+        # being removed and not due to we reaching the end of change.
+        start = time.ticks_ms()
+        while (
+            self.state != self.S_YANKED
+            and time.ticks_diff(time.ticks_ms(), start) < V_SPIKE_TH_T
+        ):
+            await asyncio.sleep_ms(100)
+
+        # We just exit on a yank
+        if self.state == self.S_YANKED:
+            logging.info(
+                "%s: Exiting discharge monitor on battery being yanked.",
+                self._bc_prefix,
+            )
+            return
+
+        logging.info(
+            "%s: Discharge complete with battery voltage at: %s. "
+            "Exiting discharge monitor.",
+            self._bc_prefix,
+            self._v_mon.voltage,
+        )
+
+        if not self.transition(self.E_dch_done):
+            logging.error(
+                "%s: Unable to transition to fully discharged. "
+                "Forcing Discharge off.",
+                self._bc_prefix,
+            )
+            # Try to force switch discharging off
+            self._cdControl(state=False, dch=True)
+
     def discharge(self) -> bool:
         """
         Starts a discharging cycle.
 
-        This is done with an `E_discharge` `transition()`.
+        This is done with an `BCStateMachine.E_discharge` `BCStateMachine.transition()`.
 
         Returns:
             True if the transition was successful.
@@ -958,7 +715,7 @@ class BatteryController(StateMachine):
         """
         Pauses the current charge or discharge cycle.
 
-        This is done with an `E_pause` `transition()`.
+        This is done with an `BCStateMachine.E_pause` `BCStateMachine.transition()`.
 
         See:
             `resume()`
@@ -977,7 +734,7 @@ class BatteryController(StateMachine):
         """
         Resumes the current charge or discharge cycle.
 
-        This is done with an `E_resume` `transition()`.
+        This is done with an `BCStateMachine.E_resume` `BCStateMachine.transition()`.
 
         See:
             `pause()`
@@ -996,7 +753,8 @@ class BatteryController(StateMachine):
         """
         Resets the metrics for the current battery.
 
-        This is done with an `E_reset_metrics` `transition()` from a paused state.
+        This is done with an `BCStateMachine.E_reset_metrics`
+        `BCStateMachine.transition()` from a paused state.
 
         Returns:
             True on success, False otherwise.
@@ -1008,11 +766,58 @@ class BatteryController(StateMachine):
         logging.error("%s: Unable to reset metrics at the moment.", self._bc_prefix)
         return False
 
+    def socMeasureToggle(self):
+        """
+        Starts a new SoC measure if not started already, or stops it if
+        currently running.
+
+        TODO:
+            Need better docs here, or a link to where this is better
+            documented.
+
+        Returns:
+            True on success, False on error with an error logged.
+        """
+        logging.info("%s: SoC measure toggle request. SoC: %s", self, self.soc_m)
+
+        # Starting or cancelling the SoC Measure depends on the state of the
+        # SoC FSM
+        if self.soc_m.state == self.soc_m.ST_READY:
+            # The SoC measurer is in the ready state, so we are good for
+            # starting a SoC measure. But this can only be done if the BC is in
+            # the S_BAT_ID state
+            if self.state == self.S_BAT_ID:
+                if self.soc_m.start():
+                    logging.info("%s: SoC measure started.", self)
+                    return True
+
+                logging.error(
+                    "%s: Error starting SoC measure.",
+                    self,
+                )
+            else:
+                logging.error(
+                    "%s: SoC FSM is ready to measure SoC but we are not in the "
+                    "correct state for that.",
+                    self,
+                )
+            return False
+
+        # The Soc FSM is not in the ready state, so we should be able to cancel it.
+        if self.soc_m.cancel():
+            logging.info("%s: Cancelled current Soc measurement process.", self)
+            return True
+
+        logging.error("%s: Error cancelling current SoC measurement process.", self)
+
+        return False
+
     def reset(self) -> bool:
         """
         Resets the state after a battery was removed.
 
-        This is done with an `E_reset_metrics` `transition()` from a paused state.
+        This is done with an `BCStateMachine.E_reset_metrics`
+        `BCStateMachine.transition()` from a paused state.
 
         Returns:
             True on success, False otherwise.
@@ -1022,70 +827,3 @@ class BatteryController(StateMachine):
 
         logging.error("%s: Unable to reset the state currently.", self._bc_prefix)
         return False
-
-    @property
-    def bat_v(self) -> int:
-        """
-        Property to return the current battery voltage.
-
-        Returns:
-            The battery voltage in mV.
-        """
-        return self._v_mon.voltage
-
-    @property
-    def bat_id(self) -> int:
-        """
-        Property to return the current battery ID.
-        """
-        return self._bat_id
-
-    @property
-    def charge_vals(self) -> tuple:
-        """
-        Property to return the current charging values as a tuple:
-
-        * 0 - Shunt resistor (R) value in ohm
-        * 1 - Voltage in mV (filtered)
-        * 2 - Current in mA (filtered)
-        * 3 - Charge in mC (filtered)
-        * 4 - Used charge in mAh (filtered)
-        * 5 - Charge time in seconds
-
-
-        Return:
-            (RΩ, mV, mA, mC, mAh, tm)
-        """
-        return (
-            self._ch_mon._shunt,  # pylint: disable=protected-access
-            self._ch_mon.voltage,
-            self._ch_mon.current,
-            self._ch_mon.charge,
-            self._ch_mon.mAh,
-            round(self._ch_mon.charge_time / 1000),
-        )
-
-    @property
-    def discharge_vals(self) -> tuple:
-        """
-        Property to return the current discharging values:
-
-        * 0 - Shunt resistor (R) value in ohm
-        * 1 - Voltage in mV (filtered)
-        * 2 - Current in mA (filtered)
-        * 3 - Charge in mC (filtered)
-        * 4 - Used charge in mAh (filtered)
-        * 5 - Charge time in seconds
-
-
-        Return:
-            (RΩ, mV, mA, mC, mAh, tm)
-        """
-        return (
-            self._dch_mon._shunt,  # pylint: disable=protected-access
-            self._dch_mon.voltage,
-            self._dch_mon.current,
-            self._dch_mon.charge,
-            self._dch_mon.mAh,
-            round(self._dch_mon.charge_time / 1000),
-        )
