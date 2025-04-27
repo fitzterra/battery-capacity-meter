@@ -40,6 +40,7 @@ HOSTNAME: str | None = "bcm"
 MQTT_HOST: str = ""
 MQTT_PORT: int = 1883
 MQTT_PUB_TOPIC: str = "BCM/state"
+MQTT_LOG_TOPIC: str = "BCM/log"
 MQTT_CTL_TOPIC: str = "BCM/ctl/#"
 MQTT_DEBUG: bool = False
 

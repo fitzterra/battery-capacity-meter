@@ -187,10 +187,24 @@ async def broadcast(bcs: list[BatteryController,]):
     messages on status changes and charge/discharge progress.
 
     In addition to monitoring the BCs, this task also sets up the `MQTTClient`
-    and by extension the WiFi connection, and also connects to the network.
+    and by extension the WiFi connection. The `MQTTClient` will do a best
+    effort attempt to re-establish network connections if it gets lost.
 
-    Warning:
-        Docs needs to be completed...
+    Besides monitoring the ``BC`` statusses, it also monitors
+    `telemetry_trigger` and `telemetry_logs` for messages to publish.
+
+    Normal BC telemetry is published on this topic::
+
+        topic = f"{net_conf.MQTT_PUB_TOPIC}/{bc.name}"
+
+    and the message is JSON which is built up by `buildMsg`
+
+    Logs are published on this topic::
+
+        topic = f"{net_conf.MQTT_LOG_TOPIC}/{log_level_str}"
+
+    with the message just a raw string, which may contain exception details.
+
     """
 
     # We need access to some protected members of the BatteryController class,
@@ -271,3 +285,11 @@ async def broadcast(bcs: list[BatteryController,]):
             msg = buildMsg(bc)
             topic = f"{net_conf.MQTT_PUB_TOPIC}/{bc.name}"
             await client.publish(topic, json.dumps(msg), qos=0)
+
+        # And also emit any logs
+        while logging.telemetry_logs:
+            # Remove the earliest log entry
+            lvl, msg = logging.telemetry_logs.pop(0)
+
+            topic = f"{net_conf.MQTT_LOG_TOPIC}/{lvl}"
+            await client.publish(topic, msg, qos=0)
