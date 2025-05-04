@@ -16,7 +16,9 @@ pages:
   before_script:
     - pip install pydoctor
   script:
+    - cd Firmware/src
     - make docs
+    - cd ../../
     - mkdir -p public
     - cp -r doc/firmware-api/* public/
   rules:
