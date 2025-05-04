@@ -16,6 +16,8 @@ pages:
   before_script:
     - pip install pydoctor
   script:
+    - git submodule init
+    - git submodule update
     - cd Firmware/src
     - make docs
     - cd ../../
