@@ -30,11 +30,21 @@ M_EDIT = const(1)  # Edit mode
 
 F_TYPES = {
     "num": bytearray(rb"0123456789", "ascii"),
-    "alpha": bytearray(rb"abcdefghijklmnopqrstuvwxyz -+_", "ascii"),
-    "ALPHA": bytearray(rb"ABCDEFGHIJKLMNOPQRSTUVWXYZ -+_", "ascii"),
-    "alnum": bytearray(rb"abcdefghijklmnopqrstuvwxyz 0123456789-+_", "ascii"),
-    "ALnum": bytearray(rb"ABCDEFGHIJKLMNOPQRSTUVWXYZ 0123456789-+_", "ascii"),
+    "alpha": bytearray(rb"abcdefghijklmnopqrstuvwxyz .,-+_=", "ascii"),
+    "ALPHA": bytearray(rb"ABCDEFGHIJKLMNOPQRSTUVWXYZ .,-+_=", "ascii"),
+    "Alpha": bytearray(
+        rb"AaBbCcDdEeFfGgHhIiJjKkLlMmNnOoPpQqRrSsTtUuVvWwXxYyZz .,-+_=", "ascii"
+    ),
+    "alnum": bytearray(rb"abcdefghijklmnopqrstuvwxyz 0123456789.,-+_=", "ascii"),
+    "ALnum": bytearray(rb"ABCDEFGHIJKLMNOPQRSTUVWXYZ 0123456789.,-+_=", "ascii"),
+    "Alnum": bytearray(
+        rb"AaBbCcDdEeFfGgHhIiJjKkLlMmNnOoPpQqRrSsTtUuVvWwXxYyZz 0123456789.,-+_=",
+        "ascii",
+    ),
 }
+"""
+AaBbCcDdEeFfGgHhIiJjKkLlMmNnOoPpQqRrSsTtUuVvWwXxYyZz
+"""
 
 
 class FieldEdit(Screen):
