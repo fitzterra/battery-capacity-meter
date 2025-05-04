@@ -1,1 +1,3 @@
 doc/firmware-api
+Firmware/src/runtime_conf/source
+Firmware/src/runtime_conf/backup
