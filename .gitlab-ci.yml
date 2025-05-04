@@ -1,0 +1,31 @@
+image: python:3.11
+
+stages:
+  - docs
+
+variables:
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+
+before_script:
+  - python -m pip install --upgrade pip
+  - pip install pydoctor
+
+pages:
+  stage: docs
+  image: python:3.11
+  before_script:
+    - pip install pydoctor
+  script:
+    - make docs
+    - mkdir -p public
+    - cp -r doc/firmware-api/* public/
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
+      when: always
+    - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+_docs_\d+$/'
+      when: always
+  artifacts:
+    paths:
+      - public
+
+
