@@ -1202,8 +1202,8 @@ class BCMView(Screen):
 
         # The .text method does not handle newlines for an open line before
         # the last line, so we improvise.
-        msg = ["Controller", "disabled.", "", "Press to exit."]
-        for l, m in enumerate(msg, 3):
+        msg = ["Controller", "disabled.", "", "Press=Exit", "LongPress=Next"]
+        for l, m in enumerate(msg, 2):
             self._display.text(f"{m:^{self._max_cols}s}", 0, l * self.FONT_H, 1)
         self._show()
 
@@ -1218,6 +1218,8 @@ class BCMView(Screen):
         self._clear(header_lns=1)
 
         self.text("Waiting for battery to be inserted...", fmt="w^", y=2)
+        self.text("Press=Exit", fmt="w^", y=6)
+        self.text("LongPress=Next", fmt="w^", y=7)
         self._show()
 
     def _setBatID(self, val: bytearray, _):
@@ -1294,7 +1296,8 @@ class BCMView(Screen):
                     ("SoC", "Measure SoC"),
                     ("Ch", "Start Charge"),
                     ("Dch", "Start Discharge"),
-                    ("Exit", "Exit Screen"),
+                    ("Ret", "Exit Screen"),
+                    (">", "Next BC"),
                 ],
                 self.footMenuCB,
             )
@@ -1360,17 +1363,20 @@ class BCMView(Screen):
                 opts = [
                     ("Cancel", "SoC Measure"),
                     ("Exit", "Exit Screen"),
+                    (">", "Next BC"),
                 ]
             elif not paused:
                 opts = [
                     ("Pause", f"Pause {'Charge' if charging else 'Discharge'}"),
                     ("Exit", "Exit Screen"),
+                    (">", "Next BC"),
                 ]
             else:
                 opts = [
                     ("Cont", f"Resume {'Charge' if charging else 'Discharge'}"),
                     ("Stop", f"Stop {'Charging' if charging else 'Discharging'}"),
                     ("Exit", "Exit Screen"),
+                    (">", "Next BC"),
                 ]
             # Create and show the footer menu
             self._foot_menu = FootMenu(self, opts, self.footMenuCB)
@@ -1701,10 +1707,16 @@ class BCMView(Screen):
         self._foot_menu = None
 
         # Are we exiting?
-        if opt == "Exit":
+        if opt in ["Exit", "Ret"]:
             # Simulate the exit by calling the shortpress now that _foot_menu
             # is None.
             self.actShort()
+
+        # Go to next BC?
+        if opt == ">":
+            # Simulate switching to the next BC by simulating the longpress now
+            # that _foot_menu is None.
+            self.actLong()
 
         if opt in ("SoC", "Cancel"):
             # These are to start or cancel a SoC measurement. For either we use

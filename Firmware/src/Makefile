@@ -24,6 +24,18 @@ MPR = mpremote
 # Firmware dir for flashing to mcu
 FW_DIR=firmware
 
+# The backup directory to use for runtime config files that are copied off the
+# device before doing a firmware upload.
+# The reason for this is that the runtime config as created directly on the
+# device by changing parameters in the config options.
+# These actions creates *_local.py runtime config files on the device, but they
+# are not listed in $MPY_SRC, so when we upload these *._local.py files are
+# removed.
+# By first backing them up via the `runtime_cfg_backup` target, then doing the
+# upload, and afterwards copying them all back to the device, we can preserver
+# local config during development.
+RT_BACKUP_DIR=./runtime_conf/backup
+
 # The MicroPython bin file for flashing to the device. This is expected to be
 # in the local dir and called micropython_esp8266.bin or micropython_esp32.bin
 # depending on the chip being flashed. Best is to have the correct bin file
@@ -247,9 +259,42 @@ clean_local_modules:
 clean_pyboard:
 	$(RS) rm -rf /pyboard/*
 
-# This rsyncs the $(FW_DIR) to the /pyboard/ dir
-upload: build
+# Backup all *_local.py files on the device to 
+# NOTES:
+# 	* mpremote does not support wildcard copies as v1.23.0
+# 	* mpremote adds \r line endings for stupid Windblows, so we need to remove
+# 	  these with the 's/\r//' sed command or else they stay in the file name.
+# 	* Since we run a pipeline with the mpremote output, we can not start
+# 	another mpremote command to do the copying in the while read loop. Instead
+# 	we touch the file names we need to copy in the backup dir, effectively
+# 	making a list of files, and the we copy then in a separate process.
+runtime_cfg_backup:
+	@echo "Backing up runtime configs..."
+	@# First clean up
+	@rm -rf $(RT_BACKUP_DIR)/*
+	@# Touch a file for each of the ones we will be backing up in RT_BACKUP_DIR
+	@$(MPR) ls : \
+		| sed -e 's/\r//' -e 's/.\+[0-9] //' \
+		| grep "_local\.py" \
+		| while read f; do \
+			echo "  [$${f}]"; \
+			touch $(RT_BACKUP_DIR)/$${f} ; \
+		  done
+	@# Now construct the mpremote cp command to copy all filenames we have
+	@# in RT_BACKUP_DIR from the remote back to RT_BACKUP_DIR
+	@(\
+		REMS=$$(ls -x $(RT_BACKUP_DIR)/ | sed 's/  / :/g'); \
+		if [[ -n $$REMS ]]; then \
+			$(MPR) cp  :$$REMS $(RT_BACKUP_DIR)/; \
+		fi \
+	 )
+
+# This rsyncs the $(FW_DIR) to the /pyboard/ dir and then resotes any runtime
+# configs
+upload: build runtime_cfg_backup
 	$(RS) rsync -m $(FW_DIR) /pyboard
+	@echo "Restoring runtime configs..."
+	$(MPR) cp $(RT_BACKUP_DIR)/* :
 
 # Shortcut to see all files in fs root on the board
 ls_pyboard:
