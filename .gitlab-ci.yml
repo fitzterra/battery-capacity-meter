@@ -15,13 +15,15 @@ pages:
   image: python:3.11
   before_script:
     - git config --global url."http://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.gaul.za/".insteadOf "git@gitlab.gaul.za:"
-    - git submodule sync && git submodule update --init
+    - git submodule sync
+    - git submodule update --init
+    - ls -l ../submodules/
+    - ls -l ../submodules/ssd1306_mp/
+    - ls -l lib
     - python -m pip install --upgrade pip
     - pip install pydoctor
   script:
     - cd Firmware/src
-    - ls -l ../submodules/
-    - ls -l lib
     - make docs
     - cd ../../
     - mkdir -p public
