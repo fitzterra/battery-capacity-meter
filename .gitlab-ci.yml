@@ -5,6 +5,8 @@ stages:
 
 variables:
   PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+  GIT_SUBMODULE_STRATEGY: recursive
+  GIT_SUBMODULE_FORCE_HTTPS: "true"
 
 before_script:
   - python -m pip install --upgrade pip
@@ -14,17 +16,10 @@ pages:
   stage: docs
   image: python:3.11
   before_script:
-    - git config --global url."http://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.gaul.za/".insteadOf "git@gitlab.gaul.za:"
-    - git submodule init
-    - git submodule update
-    - echo $(pwd)
     - python -m pip install --upgrade pip
     - pip install pydoctor
   script:
     - cd Firmware/src
-    - ls -l ../submodules/
-    - ls -l ../submodules/ssd1306_mp/
-    - ls -l lib
     - make docs
     - cd ../../
     - mkdir -p public
