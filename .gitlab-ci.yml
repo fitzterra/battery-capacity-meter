@@ -20,6 +20,8 @@ pages:
     - pip install pydoctor
   script:
     - cd Firmware/src
+    - ls -l ../submodules/
+    - ls -l lib
     - make docs
     - cd ../../
     - mkdir -p public
