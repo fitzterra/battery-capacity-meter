@@ -7,8 +7,6 @@ variables:
   PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
 
 before_script:
-  - git config --global url."http://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.gaul.za".insteadOf "git@gitlab.gaul.za:"
-  - git submodule sync && git submodule update --init
   - python -m pip install --upgrade pip
   - pip install pydoctor
 
@@ -16,6 +14,9 @@ pages:
   stage: docs
   image: python:3.11
   before_script:
+    - git config --global url."http://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.gaul.za".insteadOf "git@gitlab.gaul.za:"
+    - git submodule sync && git submodule update --init
+    - python -m pip install --upgrade pip
     - pip install pydoctor
   script:
     - cd Firmware/src
