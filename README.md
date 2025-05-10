@@ -57,5 +57,5 @@ Documentation
 -------------
 
 The application is written in Micropython and the full app docs are available
-here: [http://gaulnet.pages.gaul.za/battery-capacity-meter]
+[here](http://pages.gaul.za/gaulnet/battery-capacity-meter/)
 
