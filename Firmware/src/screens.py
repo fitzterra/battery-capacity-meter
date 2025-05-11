@@ -6,6 +6,36 @@ Attributes:
     Q2: Bit definition for drawing an ellipse_ in quadrant 2, bottom right
     Q3: Bit definition for drawing an ellipse_ in quadrant 3, bottom left
     Q4: Bit definition for drawing an ellipse_ in quadrant 4, top left
+    NET_CONF: A menu structure for a `Menu` screen to allow updating some
+        network configs in the `net_conf` module.
+
+        Each entry is a tuple of these fields (see `Menu`):
+
+        * The menu entry name to display
+        * The function to call when the option is selected, always
+          `updateConfig` in this case,
+        * The module name (`net_conf`) in which the config constant resides
+        * The actual config constant name since we have more human readable
+          menu entry names
+        * The field type as name from `FieldEdit.F_TYPES` - defaults to "num"
+          if not supplied.
+
+    RUNTIME_CONF: A menu structure for a `Menu` screen to allow updating some
+        configs in the `config` module.
+
+        Each entry is a tuple of these fields (see `Menu`):
+
+        * The menu name to display - we simply use the config constant names
+          here. Not too user friendly, but the screen limitation makes it
+          difficult to use a human readable menu name here.
+        * The function to call when the option is selected, always
+          `updateConfig` in this case,
+        * The module name (`config`) in which the config constant resides
+
+        Note: These fields are all numeric types, so we do not pass a field
+        type arg as we do for `NET_CONF` since the default is the numeric field
+        type.
+
 
 .. _ellipse:
     https://docs.micropython.org/en/latest/library/framebuf.html#framebuf.FrameBuffer.ellipse
@@ -37,6 +67,7 @@ from config import (
     OLED_H,
 )
 import config
+import net_conf
 from sitelocal_conf import updateLocal
 
 # from interface import MODE_CHARGING, MODE_DISCHARGING
@@ -910,46 +941,37 @@ class Calibration(Screen):
         self._setupCalibration()
 
 
-def updateConfig(conf_name, screen, *args):
+def updateConfig(
+    conf_name, screen, conf_mod, const_name=None, f_type="num", reboot=False, *args
+):
     """
-    `Menu` callable to update a specific config value and save it as a config
-    local value.
+    Function that will be called from he `NET_CONF` and `RUNTIME_CONF` menu
+    entries to set some local config value.
 
-    Due to space constraints on the display, this is fairly crude
-    functionality.
+    When called, we will use the ``conf_mod`` name as the config module in
+    which the ``conf_name`` (or ``const_name``) needs to be set. We will check
+    if the config constant exists in the correct module, get the current config
+    value and then dynamically create a `FieldEdit` instance to update the
+    value.
 
-    We expect the menu item name to be a config constant name from `config`.
-    These menu entries are then defined to all call here when selected, where
-    we will get the `config` constant name as first arg, and the `Menu`
-    instance as second (screen) arg.
+    If any of these checks fails, an error will be logged, and the user will
+    not see anything happening on the screen.
 
-    We will simply dynamically generate a new `FieldEdit` screen using the menu
-    name (``conf_name``) as the field label, and the value from `config` and allow the value to
-    be updated. Once updated, we will save it as a site local value to persist
-    it for future uses.
+    Due to the screen constrains, some of the config menu names are too long to
+    fit, so they will be truncated.
 
-    .. warning::
+    We will ask the ``screen`` (the `Menu` instance we were called from) to
+    pass focus to the new `FieldEdit` instance, and arrange for focus to go
+    back to the ``screen`` instance when the field editor exits.
 
-        Only numeric constants can be update currently. This may be changed
-        later to allow passing in the field type as an additional argument to
-        the callable.
-
-    To avoid crashes, we check to see if the config name is an attribute of
-    `config`, and if not, log an error and simply return. Note that in this
-    case there is no user feedback or notice of this error - bad UX.
-
-    Furthermore, many of the constants in `config` are quite long
-    (`TELEMETRY_EMIT_FREQ`, `D_RECOVER_MIN_TM`, etc.) and will thus not fit in
-    on the small OLED display. They will be truncated on the display, but still
-    function correctly as constant names. The display truncation is also bad
-    UX, which means that the user would probably need a list of all constant
-    names and their type and purpose before being able to use this
-    functionality completely.
+    Once the field has been updated and the user selects **OK** to save it, we
+    use the `sitelocal_conf` framework built into the `config` and `net_conf`
+    modules to save the constant in a local runtime config file on the device.
 
     .. warning::
 
         When updating an attribute directly in a module, any other objects that
-        have imported that module directly will see the update.
+        have imported that module by name will see the update.
 
         If however, the attribute was imported directly from the module, then
         updating it in the module will not update the directly imported value.
@@ -958,13 +980,52 @@ def updateConfig(conf_name, screen, *args):
         different modules access imported config values. Best would be a
         restart after updating config values.
 
-    """
-    logging.info("Config update request for config: '%s'", conf_name)
+        We may use the ``reboot`` option for that later.
+
+    Args:
+        conf_name: This will be the menu name for this config option. If the
+            ``const_name`` arg is None, then this is used as the config constant
+            name in the config module to set.
+        screen: This is the `Screen` or rather `Menu` instance that we were
+            called from. We will create our own `FieldEdit` `Screen`, and then
+            as our called screen to pass focus to the new `FieldEdit` screen.
+            Also arranging for this ``screen`` to receive focus again when the
+            `FieldEdit` screen exits.
+        conf_mod: The Python module in which the config option resides. This
+            can only be one one of `config` or `net_conf` for now. This means
+            that any config constant in these modules can be updated
+            dynamically from a menu entry.
+        const_name: If the ``conf_name``, i.e the menu entry string, is not the
+            name of the config constant in the ``conf_mod`` module to update,
+            then pass the actual constant name in this arg.
+        f_type: Any of the `FieldEdit.F_TYPES` names to use for the field type.
+        reboot: Not used currently, but may be used to indicate that a reboot
+            is needed for the change to take effect. May be implemented later.
+        args: This is a catchall since the `menu` callback function can allow
+            any number of args to be added. Not used in this case.
+
+
+    """  # pylint: disable=too-many-arguments,too-many-positional-arguments,unused-argument,keyword-arg-before-vararg
+    if conf_mod == "config":
+        rt_conf = config
+    elif conf_mod == "net_conf":
+        rt_conf = net_conf
+    else:
+        logging.error("updateConfig: Not a valid config module name: %s", conf_mod)
+        return
+
+    if const_name:
+        conf_name = const_name
+
+    logging.info("updateConfig: Config update request for config: '%s'", conf_name)
 
     # Make sure the config option is an attribute of config.
-    if not hasattr(config, conf_name):
+    if not hasattr(rt_conf, conf_name):
         logging.error(
-            "No config constant named '%s' to update the value for.", conf_name
+            "updateConfig: No config constant named '%s' in module '%s' "
+            "to update the value for.",
+            conf_name,
+            conf_mod,
         )
         return
 
@@ -977,38 +1038,71 @@ def updateConfig(conf_name, screen, *args):
                 expect all values to be integers, so we need to convert it to int.
             _: This is the ignored field ID from the menu.
         """
-        try:
-            val = int(val)
-        except Exception as ex:
-            logging.error(
-                "Error converting %s to int for setting the `%s' config value. Error: %s",
-                val,
-                conf_name,
-                ex,
-            )
-            return
+        if f_type == "num":
+            try:
+                val = int(val)
+            except Exception as ex:
+                logging.error(
+                    "updateConfig: Error converting %s to int for setting the "
+                    "`%s.%s' config value. Error: %s",
+                    val,
+                    conf_mod,
+                    conf_name,
+                    ex,
+                )
+                return
 
-        logging.info("Setting site local config: %s=%s", conf_name, val)
+        logging.info(
+            "updateConfig: Setting site local config: %s.%s=%s",
+            conf_mod,
+            conf_name,
+            val,
+        )
 
         # Update in the module - NOTE this does not update any directly
         # imported attributes!
-        setattr(config, conf_name, val)
+        setattr(rt_conf, conf_name, val)
 
         # Now save it as a site local
-        updateLocal(conf_name, config)
+        updateLocal(conf_name, rt_conf)
 
     # Create a new FieldEdit screen to update the setting
     conf_editor = FieldEdit(
         conf_name,
         screen.px_w,
         screen.px_h,
-        val=getattr(config, conf_name),
-        f_type="num",
+        val=getattr(rt_conf, conf_name),
+        f_type=f_type,
         setter=setConfigVal,
     )
     # Pass focus to the field editor
     # pylint: disable=protected-access
     screen._passFocus(conf_editor, return_to_me=True)
+
+
+# Network config menu structure
+NET_CONF = (
+    ("WiFi SSID", updateConfig, "net_conf", "SSID", "Alnum"),
+    ("WiFi Passwd", updateConfig, "net_conf", "PASS", "Alnum"),
+    ("MQTT Host", updateConfig, "net_conf", "MQTT_HOST", "Alnum"),
+    ("MQTT Port", updateConfig, "net_conf", "MQTT_PORT"),
+    ("DHCP Hostname", updateConfig, "net_conf", "HOSTNAME", "alpha"),
+    ("Back", None),
+)
+
+# All config options we allow updating at runtime and setting locally.
+RUNTIME_CONF = (
+    ("C_VOLTAGE_TH", updateConfig, "config"),
+    ("D_VOLTAGE_TH", updateConfig, "config"),
+    ("D_V_RECOVER_TH", updateConfig, "config"),
+    ("D_RECOVER_MAX_TM", updateConfig, "config"),
+    ("D_RECOVER_TEMP", updateConfig, "config"),
+    ("D_RECOVER_MIN_TM", updateConfig, "config"),
+    ("TELEMETRY_EMIT_FREQ", updateConfig, "config"),
+    ("SOC_REST_TIME", updateConfig, "config"),
+    ("SOC_NUM_CYCLES", updateConfig, "config"),
+    ("Back", None),
+)
 
 
 class BCMView(Screen):
@@ -1202,8 +1296,8 @@ class BCMView(Screen):
 
         # The .text method does not handle newlines for an open line before
         # the last line, so we improvise.
-        msg = ["Controller", "disabled.", "", "Press to exit."]
-        for l, m in enumerate(msg, 3):
+        msg = ["Controller", "disabled.", "", "Press=Exit", "LongPress=Next"]
+        for l, m in enumerate(msg, 2):
             self._display.text(f"{m:^{self._max_cols}s}", 0, l * self.FONT_H, 1)
         self._show()
 
@@ -1218,6 +1312,8 @@ class BCMView(Screen):
         self._clear(header_lns=1)
 
         self.text("Waiting for battery to be inserted...", fmt="w^", y=2)
+        self.text("Press=Exit", fmt="w^", y=6)
+        self.text("LongPress=Next", fmt="w^", y=7)
         self._show()
 
     def _setBatID(self, val: bytearray, _):
@@ -1294,7 +1390,8 @@ class BCMView(Screen):
                     ("SoC", "Measure SoC"),
                     ("Ch", "Start Charge"),
                     ("Dch", "Start Discharge"),
-                    ("Exit", "Exit Screen"),
+                    ("Ret", "Exit Screen"),
+                    (">", "Next BC"),
                 ],
                 self.footMenuCB,
             )
@@ -1360,17 +1457,20 @@ class BCMView(Screen):
                 opts = [
                     ("Cancel", "SoC Measure"),
                     ("Exit", "Exit Screen"),
+                    (">", "Next BC"),
                 ]
             elif not paused:
                 opts = [
                     ("Pause", f"Pause {'Charge' if charging else 'Discharge'}"),
                     ("Exit", "Exit Screen"),
+                    (">", "Next BC"),
                 ]
             else:
                 opts = [
                     ("Cont", f"Resume {'Charge' if charging else 'Discharge'}"),
                     ("Stop", f"Stop {'Charging' if charging else 'Discharging'}"),
                     ("Exit", "Exit Screen"),
+                    (">", "Next BC"),
                 ]
             # Create and show the footer menu
             self._foot_menu = FootMenu(self, opts, self.footMenuCB)
@@ -1701,10 +1801,16 @@ class BCMView(Screen):
         self._foot_menu = None
 
         # Are we exiting?
-        if opt == "Exit":
+        if opt in ["Exit", "Ret"]:
             # Simulate the exit by calling the shortpress now that _foot_menu
             # is None.
             self.actShort()
+
+        # Go to next BC?
+        if opt == ">":
+            # Simulate switching to the next BC by simulating the longpress now
+            # that _foot_menu is None.
+            self.actLong()
 
         if opt in ("SoC", "Cancel"):
             # These are to start or cancel a SoC measurement. For either we use
@@ -1733,21 +1839,6 @@ class BCMView(Screen):
 
         else:
             logging.info("Received invalid option from footer menu: %s", opt)
-
-
-# All config options we allow updating at runtime and setting locally.
-RUNTIME_CONF = (
-    ("C_VOLTAGE_TH", updateConfig),
-    ("D_VOLTAGE_TH", updateConfig),
-    ("D_V_RECOVER_TH", updateConfig),
-    ("D_RECOVER_MAX_TM", updateConfig),
-    ("D_RECOVER_TEMP", updateConfig),
-    ("D_RECOVER_MIN_TM", updateConfig),
-    ("TELEMETRY_EMIT_FREQ", updateConfig),
-    ("SOC_REST_TIME", updateConfig),
-    ("SOC_NUM_CYCLES", updateConfig),
-    ("Back", None),
-)
 
 
 def uiSetup(bcms: list):
@@ -1793,6 +1884,7 @@ def uiSetup(bcms: list):
             "Config",
             (
                 ("Calibration", Calibration("Calibration", OLED_W, OLED_H, bcms)),
+                ("Network Config", NET_CONF),
                 ("Runtime Config", RUNTIME_CONF),
                 ("Back", None),
             ),

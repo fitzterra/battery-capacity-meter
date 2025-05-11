@@ -1,0 +1,36 @@
+image: python:3.11
+
+stages:
+  - docs
+
+variables:
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+  GIT_SUBMODULE_STRATEGY: recursive
+  GIT_SUBMODULE_FORCE_HTTPS: "true"
+
+before_script:
+  - python -m pip install --upgrade pip
+  - pip install pydoctor
+
+pages:
+  stage: docs
+  image: python:3.11
+  before_script:
+    - python -m pip install --upgrade pip
+    - pip install pydoctor
+  script:
+    - cd Firmware/src
+    - make docs
+    - cd ../../
+    - mkdir -p public
+    - cp -r -L doc/firmware-api/* public/
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
+      when: always
+    - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+_docs_\d+$/'
+      when: always
+  artifacts:
+    paths:
+      - public
+
+
