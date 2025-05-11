@@ -143,3 +143,12 @@ FootMenu
 vals
 BCStateMachine
 DW01
+submodules
+submodule
+ESP32
+KiCAD
+BCM
+direnv
+Homebrew
+MicroPython
+REPL
