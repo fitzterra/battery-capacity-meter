@@ -622,5 +622,8 @@
       "Root"
     ]
   ],
-  "text_variables": {}
+  "text_variables": {
+    "PROJ_NAME": "Battery Capacity Meter",
+    "VERSION": "1.2.0"
+  }
 }

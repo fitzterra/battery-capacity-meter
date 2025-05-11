@@ -1,5 +1,5 @@
 *.mpy
 *.pyc
 .direnv
-*.bin
 firmware/
+micropython_binary/
