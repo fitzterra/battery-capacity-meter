@@ -41,7 +41,8 @@ can be calibrated at runtime.
 Schematic
 ~~~~~~~~~
 
-.. image:: ../Electronics/BatCapMeter.svg
+.. image:: img/BatCapMeter-schematic.svg
+   :width: 100%
 
 Hardware config
 ~~~~~~~~~~~~~~~

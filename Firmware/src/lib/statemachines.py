@@ -51,11 +51,12 @@ class BCStateMachine:
 
     State Diagram:
 
-    .. image:: ../../doc/design/BC_StateDiagram.drawio.png
+    .. image:: img/BC_StateDiagram.drawio.png
+       :width: 100%
 
     See:
-        [../../doc/design/BC_StateMachine.md] for MermaidJS_ source for this
-        FSM
+        [../../doc/Firmware/FSM_Design/BC_StateMachine.md] for MermaidJS_ source
+        for this FSM
 
     Attributes:
 
@@ -374,7 +375,8 @@ class SoCStateMachine:
 
     State Diagram:
 
-    .. image:: ../../doc/design/SoC_StateDiagram.drawio.png
+    .. image:: img/SoC_StateDiagram.drawio.png
+       :width: 100%
 
     See:
         [../../doc/design/SoC_StateMachine.md] for MermaidJS_ source for this

@@ -95,7 +95,7 @@ class FootMenu:
 
     See the menu animation at the bottom of the screen sample below:
 
-    .. image:: ../../Firmware/ScreenDesign/OLED128x64_BatIns_State_larger.gif
+    .. image:: img/OLED128x64_BatIns_State_larger.gif
 
     To use this menu, the following has to done:
 
@@ -1131,16 +1131,16 @@ class BCMView(Screen):
 
     Some sample screens:
 
-    .. image:: ../../Firmware/ScreenDesign/OLED128x64_BatIns_State_larger.gif
+    .. image:: img/OLED128x64_BatIns_State_larger.gif
 
     Animated footer menu with a battery inserted in the controller with the name
     **BC0**
 
-    .. image:: ../../Firmware/ScreenDesign/OLED128x64_Charge_State_large.gif
+    .. image:: img/OLED128x64_Charge_State_large.gif
 
     Animation of the charge in progress screen.
 
-    .. image:: ../../Firmware/ScreenDesign/OLED128x64_Disharge_Complete_larger.png
+    .. image:: img/OLED128x64_Disharge_Complete_larger.png
 
     The screen when charging is complete.
 
