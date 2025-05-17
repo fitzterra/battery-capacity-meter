@@ -324,7 +324,7 @@ docs: doc_img
 	if [[ $$remote_url == git@* ]]; then \
 	  remote_url=$$(echo "$$remote_url" | sed -e 's/:/\//' -e 's|^git@|https://|'); \
 	fi && \
-	if [[ $$remote_url == == http://gitlab-ci-token* ]]; then \
+	if [[ $$remote_url == http://gitlab-ci-token* ]]; then \
 		remote_url=$$(echo "$$remote_url" | sed -e 's|^.*@|https://|'); \
 	fi && \
 	if [[ $$remote_url == *.git ]]; then \
