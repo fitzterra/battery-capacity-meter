@@ -459,7 +459,7 @@ class SoCStateMachine:
 
         cycle_tm: The current cycle duration thus far in seconds.
 
-        in_progress: Can be used by external fuynctions to determine if a SoC
+        in_progress: Can be used by external functions to determine if a SoC
             measure is currently in progress.
 
             The state of this attribute is managed in `monitorBCState`.

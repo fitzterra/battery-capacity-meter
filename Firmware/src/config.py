@@ -398,6 +398,11 @@ SOC_REST_TIME = 5 * 60
 # The number of cycles to run for a SoC measurement
 SOC_NUM_CYCLES = 2
 
+##### Calibration config ######
+# The step value to increase or decrease a shunt resistor value by when
+# calibrating the shunt.
+CALIB_STEP = 0.05
+
 
 # Override any site local values
 overrideLocal(__name__, locals())

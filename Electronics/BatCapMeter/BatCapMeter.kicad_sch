@@ -6898,6 +6898,15 @@
 				(hide yes)
 			)
 		)
+		(property "Board" "BC"
+			(at 125.73 128.27 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
 		(pin "1"
 			(uuid "4d3989e4-ea18-4e82-9986-4f68ccb922a8")
 		)
@@ -6958,6 +6967,15 @@
 		)
 		(property "Description" "Light emitting diode"
 			(at 49.53 124.46 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Board" "BC"
+			(at 49.53 124.46 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7026,6 +7044,15 @@
 			)
 		)
 		(property "Description" "Resistor, US symbol"
+			(at 181.61 80.01 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Board" "Master"
 			(at 181.61 80.01 0)
 			(effects
 				(font
@@ -7170,6 +7197,15 @@
 				(hide yes)
 			)
 		)
+		(property "Board" "BC"
+			(at 124.46 166.37 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
 		(pin "1"
 			(uuid "04ab2c33-84c4-4ffb-b16e-42b3a8eb2bdf")
 		)
@@ -7232,6 +7268,15 @@
 			)
 		)
 		(property "Description" "N-MOSFET transistor, gate/source/drain"
+			(at 119.38 162.56 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Board" "BC"
 			(at 119.38 162.56 0)
 			(effects
 				(font
@@ -7379,6 +7424,15 @@
 				(hide yes)
 			)
 		)
+		(property "Board" "BC"
+			(at 88.9 176.53 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
 		(pin "1"
 			(uuid "2944c4e6-38ac-4d11-8302-6e87464f92f6")
 		)
@@ -7515,6 +7569,15 @@
 				(hide yes)
 			)
 		)
+		(property "Board" "BC"
+			(at 58.42 166.37 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
 		(pin "1"
 			(uuid "ddf251b1-1a5e-41a7-83a9-947c08a82b08")
 		)
@@ -7576,6 +7639,15 @@
 			)
 		)
 		(property "Description" "Resistor, US symbol"
+			(at 175.26 80.01 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Board" "Master"
 			(at 175.26 80.01 0)
 			(effects
 				(font
@@ -7646,6 +7718,15 @@
 			)
 		)
 		(property "Description" "Resistor, US symbol"
+			(at 132.08 156.21 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Board" "BC"
 			(at 132.08 156.21 0)
 			(effects
 				(font
@@ -7853,6 +7934,15 @@
 				(hide yes)
 			)
 		)
+		(property "Board" "Master"
+			(at 245.11 140.97 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
 		(pin "7"
 			(uuid "c02de750-39fb-4fe5-806a-f43fa5945de5")
 		)
@@ -7938,6 +8028,14 @@
 				(hide yes)
 			)
 		)
+		(property "Board" "BC"
+			(at 91.44 157.48 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "3048239c-1978-4ca2-8e3e-2fcccdc27df7")
 		)
@@ -7997,6 +8095,15 @@
 			)
 		)
 		(property "Description" "Generic connector, single row, 01x07, script generated"
+			(at 219.71 140.97 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Board" "Master"
 			(at 219.71 140.97 0)
 			(effects
 				(font
@@ -8171,6 +8278,15 @@
 				(hide yes)
 			)
 		)
+		(property "Board" "Master"
+			(at 243.84 40.64 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
 		(pin "CLK"
 			(uuid "32e48950-b152-40b7-a7be-6979d1afd753")
 		)
@@ -8240,6 +8356,15 @@
 			)
 		)
 		(property "Description" "P-MOSFET transistor, gate/source/drain"
+			(at 50.8 152.4 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Board" "BC"
 			(at 50.8 152.4 0)
 			(effects
 				(font
@@ -8451,6 +8576,15 @@
 				(hide yes)
 			)
 		)
+		(property "Board" "Master"
+			(at 168.91 140.97 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
 		(pin "7"
 			(uuid "300eedcc-5514-460a-8dd3-f347e69480c8")
 		)
@@ -8526,6 +8660,15 @@
 			)
 		)
 		(property "Description" "Generic connector, single row, 01x07, script generated"
+			(at 99.06 118.11 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Board" "BC"
 			(at 99.06 118.11 0)
 			(effects
 				(font
@@ -8616,6 +8759,15 @@
 				(hide yes)
 			)
 		)
+		(property "Board" "Master"
+			(at 27.94 50.8 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
 		(pin "1"
 			(uuid "4268e9f5-3a36-4229-9426-d4c9d0716640")
 		)
@@ -8677,6 +8829,15 @@
 			)
 		)
 		(property "Description" "N-MOSFET transistor, gate/source/drain"
+			(at 139.7 162.56 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Board" "BC"
 			(at 139.7 162.56 0)
 			(effects
 				(font
@@ -8747,6 +8908,15 @@
 			)
 		)
 		(property "Description" "Generic connector, single row, 01x07, script generated"
+			(at 195.58 140.97 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Board" "Master"
 			(at 195.58 140.97 0)
 			(effects
 				(font
@@ -8907,6 +9077,15 @@
 				(hide yes)
 			)
 		)
+		(property "Board" "Master"
+			(at 193.04 41.91 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
 		(pin "4"
 			(uuid "f14049ed-ad5b-46f0-aad1-68d9dc563dc5")
 		)
@@ -8975,6 +9154,15 @@
 			)
 		)
 		(property "Description" "Resistor, US symbol"
+			(at 43.18 153.67 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Board" "BC"
 			(at 43.18 153.67 0)
 			(effects
 				(font
@@ -9053,6 +9241,15 @@
 				(hide yes)
 			)
 		)
+		(property "Board" "BC"
+			(at 36.83 160.02 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
 		(pin "2"
 			(uuid "25cab61b-fa6e-4f12-b29a-5d59d453092d")
 		)
@@ -9113,6 +9310,15 @@
 			)
 		)
 		(property "Description" "P-MOSFET transistor, gate/source/drain"
+			(at 116.84 152.4 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Board" "BC"
 			(at 116.84 152.4 0)
 			(effects
 				(font
@@ -9186,6 +9392,15 @@
 			)
 		)
 		(property "Description" "Resistor, US symbol"
+			(at 36.83 146.05 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Board" "BC"
 			(at 36.83 146.05 0)
 			(effects
 				(font
@@ -9327,6 +9542,15 @@
 				(hide yes)
 			)
 		)
+		(property "Board" "BC"
+			(at 78.74 152.4 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
 		(pin "1"
 			(uuid "ca040686-088b-4916-8c28-9292c3a0b707")
 		)
@@ -9395,6 +9619,15 @@
 			)
 		)
 		(property "Description" "Resistor, US symbol"
+			(at 60.96 124.46 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Board" "BC"
 			(at 60.96 124.46 0)
 			(effects
 				(font
@@ -9473,6 +9706,15 @@
 				(hide yes)
 			)
 		)
+		(property "Board" "BC"
+			(at 101.6 176.53 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
 		(pin "2"
 			(uuid "5e2fb3a4-441e-4d15-b1ae-866dcfaeb0a9")
 		)
@@ -9535,6 +9777,15 @@
 			)
 		)
 		(property "Description" "Generic connector, single row, 01x02, script generated"
+			(at 147.32 147.32 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Board" "BC"
 			(at 147.32 147.32 0)
 			(effects
 				(font
@@ -9613,6 +9864,15 @@
 				(hide yes)
 			)
 		)
+		(property "Board" "BC"
+			(at 109.22 153.67 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
 		(pin "1"
 			(uuid "c814830f-17ae-4f53-ab82-5f12e0394d10")
 		)
@@ -9675,6 +9935,15 @@
 			)
 		)
 		(property "Description" ""
+			(at 106.68 52.07 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Board" "Master"
 			(at 106.68 52.07 0)
 			(effects
 				(font
@@ -9768,6 +10037,15 @@
 		)
 		(property "Description" "MCU Module based on ESP32-S2FN4R2"
 			(at 244.348 52.07 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Board" "Master"
+			(at 243.84 88.9 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -9935,6 +10213,15 @@
 				(hide yes)
 			)
 		)
+		(property "Board" "Master"
+			(at 71.12 52.07 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
 		(pin "9"
 			(uuid "7af36d6f-6a9e-4f45-ab63-4e2d862e4c26")
 		)
@@ -10021,6 +10308,15 @@
 			)
 		)
 		(property "Description" ""
+			(at 132.08 50.8 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Board" "Master"
 			(at 132.08 50.8 0)
 			(effects
 				(font
@@ -10247,6 +10543,15 @@
 			)
 		)
 		(property "Description" "N-MOSFET transistor, gate/source/drain"
+			(at 53.34 162.56 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Board" "BC"
 			(at 53.34 162.56 0)
 			(effects
 				(font
