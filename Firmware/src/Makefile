@@ -70,7 +70,7 @@ flash-bin           - Flashes the Python binary to the device
 build               - Builds the firmware
 upload              - Uploads the firmware - will do a build if needed
 runtime-cfg-backup  - Backs up runtime config off the device - auto done before upload
-clean:              - Cleans firmware and all .mpy files found
+clean               - Cleans firmware and all .mpy files found
 repl                - Connects to device and runs a REPL
 docs                - Buils the applications docs
 run                 - Build, uploads and the ndoes a soft reset to run the new firmware
@@ -292,20 +292,49 @@ reset:
 	# Do a soft reset by sending a CTRL-D via rshell running the REPL
 	$(RS) repl '~  ~'
 
+# Dynamically symlink all known images from the main docs dir to a local img
+# dir inside this src dir. This is needed so that any images referred to in the
+# docs are all contained in this dir tree. Without this, when we build the docs
+# for GitLab pages, we will copy the full img dir as actual files in order to
+# make all images work in the docs.
+doc_img:
+	@# Remove all current symlinks
+	@rm -rf img
+	@mkdir img
+	@# Create symlinks to all available images in docs/ dir
+	@cd img; \
+	for i in ../../../doc/Electronics/*.{png,jpg,jpeg,svg,gif}; do\
+		[[ ! -f $$i ]] && continue; \
+		ln -s $$i; \
+	done; \
+	for i in ../../../doc/Firmware/{FSM_Design,Screen_Design}/*.{png,jpg,jpeg,svg,gif}; do\
+		[[ ! -f $$i ]] && continue; \
+		ln -s $$i; \
+	done
+
 # Builds the docs using pydoctor. Requires the pydoctor python package to have
 # been installed, and also a fully configured pydoctor.ini or similar config
 # file for pydoctor
-docs:
+docs: doc_img
 	@# First determine remote gitlab url from the git remote,
 	@# and also the current branch. This is used to set the
 	@# source URL for the docs
 	@remote_url=$$(git config --get remote.origin.url) && \
 	branch_name=$$(git branch --show-current) && \
 	if [[ $$remote_url == git@* ]]; then \
-	  remote_url=$$(echo "$$remote_url" | sed -e 's/:/\//' -e 's/^git@/http:\/\//'); \
+	  remote_url=$$(echo "$$remote_url" | sed -e 's/:/\//' -e 's|^git@|https://|'); \
+	fi && \
+	if [[ $$remote_url == *gitlab-ci-token* ]]; then \
+		remote_url=$$(echo "$$remote_url" | sed -e 's|^.*@|https://|'); \
 	fi && \
 	if [[ $$remote_url == *.git ]]; then \
 	  remote_url=$${remote_url%.git}; \
 	fi && \
 	html_url="$$remote_url/blob/$$branch_name/Firmware/src" && \
-	pydoctor --project-url "$$remote_url" --html-viewsource-base "$$html_url" --template-dir=./pydoctor_templates
+	pydoctor --project-url "$$remote_url" --html-viewsource-base "$$html_url" \
+		--template-dir=./pydoctor_templates
+	@#We need to now symlink the local img dir to the docs output dir - A bit
+	@# messy here with these hardcoded dirs, but should be easy to spot if it
+	@# breaks.
+	@cd ../../doc/firmware-api && ln -sf ../../Firmware/src/img
+
