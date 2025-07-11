@@ -70,7 +70,7 @@ flash-bin           - Flashes the Python binary to the device
 build               - Builds the firmware
 upload              - Uploads the firmware - will do a build if needed
 runtime-cfg-backup  - Backs up runtime config off the device - auto done before upload
-clean:              - Cleans firmware and all .mpy files found
+clean               - Cleans firmware and all .mpy files found
 repl                - Connects to device and runs a REPL
 docs                - Buils the applications docs
 run                 - Build, uploads and the ndoes a soft reset to run the new firmware
