@@ -1,0 +1,3 @@
+# The img image is dynamically filled for the doc generation by the doc_img
+# make target, so we do not track changes in this dir
+img/

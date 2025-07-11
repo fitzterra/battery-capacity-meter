@@ -65,6 +65,7 @@ from config import (
     OLED_ADDR,
     OLED_W,
     OLED_H,
+    CALIB_STEP,
 )
 import config
 import net_conf
@@ -95,7 +96,7 @@ class FootMenu:
 
     See the menu animation at the bottom of the screen sample below:
 
-    .. image:: ../../Firmware/ScreenDesign/OLED128x64_BatIns_State_larger.gif
+    .. image:: img/OLED128x64_BatIns_State_larger.gif
 
     To use this menu, the following has to done:
 
@@ -769,7 +770,7 @@ class Calibration(Screen):
             )
             # Update shunt value
             self._display.text(
-                f"{self._shunt:0.1f} ohm",
+                f"{self._shunt:0.2f} ohm",
                 7 * self.FONT_W,
                 self._shunt_row * self.FONT_H,
                 1,
@@ -798,7 +799,7 @@ class Calibration(Screen):
         """
         # When we're calibrating CCW rotation decreases the shunt value by one
         if self._state == self.S_CALIB:
-            self._shunt = -0.10
+            self._shunt = -CALIB_STEP
             # Update immediately to give instant feedback
             self.update()
             return
@@ -824,7 +825,7 @@ class Calibration(Screen):
         """
         # When we're calibrating CW rotation increases the shunt value by one
         if self._state == self.S_CALIB:
-            self._shunt = 0.10
+            self._shunt = CALIB_STEP
             # Update immediately to give instant feedback
             self.update()
             return
@@ -1131,16 +1132,16 @@ class BCMView(Screen):
 
     Some sample screens:
 
-    .. image:: ../../Firmware/ScreenDesign/OLED128x64_BatIns_State_larger.gif
+    .. image:: img/OLED128x64_BatIns_State_larger.gif
 
     Animated footer menu with a battery inserted in the controller with the name
     **BC0**
 
-    .. image:: ../../Firmware/ScreenDesign/OLED128x64_Charge_State_large.gif
+    .. image:: img/OLED128x64_Charge_State_large.gif
 
     Animation of the charge in progress screen.
 
-    .. image:: ../../Firmware/ScreenDesign/OLED128x64_Disharge_Complete_larger.png
+    .. image:: img/OLED128x64_Disharge_Complete_larger.png
 
     The screen when charging is complete.
 
@@ -1387,11 +1388,11 @@ class BCMView(Screen):
             self._foot_menu = FootMenu(
                 self,
                 [
+                    (">", "Next BC"),
                     ("SoC", "Measure SoC"),
                     ("Ch", "Start Charge"),
                     ("Dch", "Start Discharge"),
                     ("Ret", "Exit Screen"),
-                    (">", "Next BC"),
                 ],
                 self.footMenuCB,
             )
@@ -1455,22 +1456,22 @@ class BCMView(Screen):
             if self._bc.soc_m.in_progress:
                 # We are busy with a SoC measurement
                 opts = [
-                    ("Cancel", "SoC Measure"),
-                    ("Exit", "Exit Screen"),
                     (">", "Next BC"),
+                    ("Exit", "Exit Screen"),
+                    ("Cancel", "SoC Measure"),
                 ]
             elif not paused:
                 opts = [
-                    ("Pause", f"Pause {'Charge' if charging else 'Discharge'}"),
-                    ("Exit", "Exit Screen"),
                     (">", "Next BC"),
+                    ("Exit", "Exit Screen"),
+                    ("Pause", f"Pause {'Charge' if charging else 'Discharge'}"),
                 ]
             else:
                 opts = [
+                    (">", "Next BC"),
+                    ("Exit", "Exit Screen"),
                     ("Cont", f"Resume {'Charge' if charging else 'Discharge'}"),
                     ("Stop", f"Stop {'Charging' if charging else 'Discharging'}"),
-                    ("Exit", "Exit Screen"),
-                    (">", "Next BC"),
                 ]
             # Create and show the footer menu
             self._foot_menu = FootMenu(self, opts, self.footMenuCB)
@@ -1544,13 +1545,15 @@ class BCMView(Screen):
                 and self._bc.soc_m.state != self._bc.soc_m.ST_COMPLETE
             ):
                 opts = [
-                    ("Cancel", "SoC Measure"),
+                    (">", "Next BC"),
                     ("Exit", "Exit Screen"),
+                    ("Cancel", "SoC Measure"),
                 ]
             else:
                 opts = [
-                    ("Reset", "Reset Metrics"),
+                    (">", "Next BC"),
                     ("Exit", "Exit Screen"),
+                    ("Reset", "Reset Metrics"),
                 ]
 
             # Create the footer menu, and draw it

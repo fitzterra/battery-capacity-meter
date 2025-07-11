@@ -51,11 +51,12 @@ class BCStateMachine:
 
     State Diagram:
 
-    .. image:: ../../doc/design/BC_StateDiagram.drawio.png
+    .. image:: img/BC_StateDiagram.drawio.png
+       :width: 100%
 
     See:
-        [../../doc/design/BC_StateMachine.md] for MermaidJS_ source for this
-        FSM
+        [../../doc/Firmware/FSM_Design/BC_StateMachine.md] for MermaidJS_ source
+        for this FSM
 
     Attributes:
 
@@ -374,7 +375,8 @@ class SoCStateMachine:
 
     State Diagram:
 
-    .. image:: ../../doc/design/SoC_StateDiagram.drawio.png
+    .. image:: img/SoC_StateDiagram.drawio.png
+       :width: 100%
 
     See:
         [../../doc/design/SoC_StateMachine.md] for MermaidJS_ source for this
@@ -457,7 +459,7 @@ class SoCStateMachine:
 
         cycle_tm: The current cycle duration thus far in seconds.
 
-        in_progress: Can be used by external fuynctions to determine if a SoC
+        in_progress: Can be used by external functions to determine if a SoC
             measure is currently in progress.
 
             The state of this attribute is managed in `monitorBCState`.
