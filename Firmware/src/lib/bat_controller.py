@@ -345,6 +345,8 @@ class BatteryController(BCStateMachine):
 
         # When we transitioned to charging, we need to switch the controller on
         if self.state == self.S_CHARGE:
+            # First start the zero current monitor
+            asyncio.create_task(self._zeroChargeMonitor())
             # NOTE: If our FSM is correct we should not ever get an error here.
             return self._cdControl(state=True, ch=True)
 
@@ -694,6 +696,71 @@ class BatteryController(BCStateMachine):
             )
             # Try to force switch discharging off
             self._cdControl(state=False, dch=True)
+
+    async def _zeroChargeMonitor(self):
+        """
+        This coro is started for a charge cycle, and monitors the charge
+        current going to zero to detect when charging is complete.
+
+        Some battery/BC/shunt/TP4056 combos will only determine that the
+        battery is fully charged while there is still a very low charge current
+        flowing. If this current is lower that our charge spike detection
+        threshold, it will not be detected as spike when the TP4056 finally
+        stops charging.
+
+        For this reason we will also monitor the charge current while in the
+        charge state, and if it falls to very close to 0 (<=2mA harcoded
+        currently), we will set charging as complete and transition to the next
+        sate.
+
+        The test for complete will be done every 100ms (hardcoded for now).
+
+        Once discharge is complete, this coro will generate a
+        `BCStateMachine.E_ch_done` event and exit.
+        """
+        logging.info("%s: Starting zero current charge monitor.", self._bc_prefix)
+
+        # When we get here it may be right after a monitor reset which means
+        # the current will not be correct. For this reason we pause here for a
+        # bit to get the current monitor to register the correct current
+        await asyncio.sleep_ms(1000)
+
+        # Monitor for charge current going below our threshold in mA
+        while self._ch_mon.current > 2:
+            await asyncio.sleep_ms(100)
+
+        # If we are still in the charge state, we are now completed and should
+        # transition.
+        if self.state == self.S_CHARGE:
+            logging.info(
+                "%s: Charge current fell to zero threshold (%s) without "
+                "triggering a spike. Setting charge completed.",
+                self._bc_prefix,
+                self._ch_mon.current,
+            )
+            if not self.transition(self.E_ch_done):
+                logging.error(
+                    "%s: Unable to transition to fully charged. Forcing Charge off.",
+                    self._bc_prefix,
+                )
+                # Try to force switch charging off
+                self._cdControl(state=False, ch=True)
+        else:
+            # If we get here, it would be because the spike detector stopped
+            # charging. We simply log the state and do nothing more.
+            logging.info(
+                "%s: Charge current fell to zero threshold (%s) but not in "
+                "CHARGE state anymore. Ignoring this zero detection.",
+                self._bc_prefix,
+                self._ch_mon.current,
+            )
+
+        # All done, we should now not be in the charge state anymore, so we can
+        # exit this monitor.
+        logging.info(
+            "%s: Exiting zero current charge monitor.",
+            self._bc_prefix,
+        )
 
     def discharge(self) -> bool:
         """

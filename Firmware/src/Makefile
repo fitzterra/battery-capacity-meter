@@ -49,7 +49,7 @@ MP_BIN_PATH := $(MP_BIN_DIR)/$(MP_BIN)
 
 .PHONY = help show-mcu-conf dev-env \
 	     detect-chip detect-device erase-flash flash-bin build \
-	     runtime-cfg-backup upload run clean conf repl reset docs 
+	     runtime-cfg-backup upload run clean conf repl reset mr docs 
 
 # Make sure we run build if no target is given on the command line, and not
 # erase-flash or some other unintended target.
@@ -76,6 +76,9 @@ docs                - Buils the applications docs
 run                 - Build, uploads and the ndoes a soft reset to run the new firmware
 conf                - Show some config settings
 reset               - Does a soft reset to the connected device
+mr                  - Generates a gitlab MR for the current branch.
+                      Requires glab (GitLab CLI client) to be installed and set up for repo access
+release             - Creates a release. In UAT creates an RC release, and a prod release in main.
 
 endef
 
@@ -289,8 +292,22 @@ repl:
 	$(MPR) repl
 
 reset:
-	# Do a soft reset by sending a CTRL-D via rshell running the REPL
+	@# Do a soft reset by sending a CTRL-D via rshell running the REPL
 	$(RS) repl '~  ~'
+
+## Creates an MR for the current branch if not on the UAT or main branches
+mr:
+	@branch_name=$$(git branch --show-current); \
+	if [[ $$branch_name =~ ^UAT|main$$ ]]; then \
+	  echo -e "\nCan not create an MR on the UAT or main branch."; \
+	  echo -e "Please create a feature branch first.\n"; \
+	  exit 1; \
+	fi; \
+	glab mr create --squash-before-merge --remove-source-branch
+
+# Creates a release
+release:
+	@./release_helper.sh
 
 # Dynamically symlink all known images from the main docs dir to a local img
 # dir inside this src dir. This is needed so that any images referred to in the
