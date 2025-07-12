@@ -78,6 +78,7 @@ conf                - Show some config settings
 reset               - Does a soft reset to the connected device
 mr                  - Generates a gitlab MR for the current branch.
                       Requires glab (GitLab CLI client) to be installed and set up for repo access
+release             - Creates a release. In UAT creates an RC release, and a prod release in main.
 
 endef
 
@@ -303,6 +304,10 @@ mr:
 	  exit 1; \
 	fi; \
 	glab mr create --squash-before-merge --remove-source-branch
+
+# Creates a release
+release:
+	@./release_helper.sh
 
 # Dynamically symlink all known images from the main docs dir to a local img
 # dir inside this src dir. This is needed so that any images referred to in the
