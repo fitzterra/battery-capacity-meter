@@ -997,9 +997,9 @@ class ChargeMonitor(CurrentMonitor):
         Converts the sampled current to a Charge value in both mC and mAh.
 
         Note:
-            The base `CurrentMonitor` sets the current as the value againsts
+            The base `CurrentMonitor` sets the current as the value against
             which we do spike detection. We do not change it here since that is
-            probably the correct value for spike detection, and not the carge
+            probably the correct value for spike detection, and not the charge
             or mAh value.
 
         Side Effect:
