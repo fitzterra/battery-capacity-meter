@@ -165,6 +165,21 @@ Attributes:
                 )
             )
 
+    LOGGING_CFG: Used to disable logging per named logger.
+
+        By default logging is enabled for all log requests (barring the level
+        allows it), but this config allows specific loggers to be disabled per
+        destination. See `lib.ulogging.LOGGING_CFG` for more details and info
+        about destinations.
+
+        For effective use of this mechanism, it would be best to set up a
+        logger per module via `getLogger` ``(__name__)`` and then the module name
+        can be used as the logger name in this structure.
+
+        Then, for the module/logger name, the standard logging or telemetry
+        logging can be disabled/enabled by the destination keys as explained in
+        `lib.ulogging.LOGGING_CFG`.
+
     ads1115: An ADS1115 instance set to the default I²C address, available for
         all monitors to use.
 
@@ -403,6 +418,17 @@ SOC_NUM_CYCLES = 2
 # calibrating the shunt.
 CALIB_STEP = 0.05
 
+##### Logging config #####
+LOGGING_CFG = {
+    "__main__": {
+        "log": True,
+        "telem": False,
+    },
+    "screens": {
+        "log": True,
+        "telem": False,
+    },
+}
 
 # Override any site local values
 overrideLocal(__name__, locals())

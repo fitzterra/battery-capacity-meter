@@ -5,8 +5,10 @@ This module provides a menu function using the `Menu` class to display and
 navigate a hierarchical menu structure or `Screen` s and sub- `Menu` s
 """
 
-from lib import ulogging as logging
+from lib.ulogging import getLogger
 from .ui_output import Screen
+
+logger = getLogger(__name__)
 
 
 class Menu(Screen):
@@ -176,7 +178,13 @@ class Menu(Screen):
     # pylint: disable=too-many-instance-attributes
 
     def __init__(
-        self, name: str, px_w: int, px_h: int, menu_def: tuple, title: bool = False
+        self,
+        name: str,
+        px_w: int,
+        px_h: int,
+        menu_def: tuple,
+        title: bool = False,
+        logger=logger,
     ) -> None:
         """
         Class init.
@@ -190,13 +198,15 @@ class Menu(Screen):
             title: If True, the menu name will be displayed as a centered title
                 at the top of the screen. If False (the default), no title will
                 be displayed, allowing one extra line for a menu item.
+            logger: An optional application logging instance to use for all
+                logs. Defaults to a local module logger if not supplied.
 
         """
         # We need all these args:
         # @pylint: disable=too-many-arguments,too-many-positional-arguments
 
         # Call our base and set the screen name
-        super().__init__(name, px_w, px_h)
+        super().__init__(name, px_w, px_h, logger=logger)
 
         # See class docstring Attributes section for documentation of these
         # instance variables
@@ -333,7 +343,7 @@ class Menu(Screen):
                 try:
                     menu_txt = item[1].menuText()
                 except Exception as exc:
-                    logging.error(
+                    self._logger.error(
                         "Error getting dynamic menu text from Screen %s. "
                         "Falling back to fixed entry '%s'. Error: %s",
                         item[1],
@@ -421,7 +431,7 @@ class Menu(Screen):
             # It's a callable. We expect to be able to pass the current menu
             # item name, a reference to this Screen/Menu instance, and any
             # additional optional arguments the item definition may have.
-            logging.debug(
+            self._logger.debug(
                 "Going call function menu item %s : %s(%s, %s, *%s)",
                 menu_item,
                 act_item,
@@ -435,7 +445,7 @@ class Menu(Screen):
 
             # If res is True, and we can pass focus to a parent, we do so.
             if res is True and self._focus_on_exit:
-                logging.info("Passing focus to %s", self._focus_on_exit)
+                self._logger.info("Passing focus to %s", self._focus_on_exit)
                 self._passFocus(None)
 
             return
@@ -446,7 +456,9 @@ class Menu(Screen):
             self.actLong()
             return
 
-        logging.error("Invalid menu action %s, for entry '%s'", act_item, menu_item)
+        self._logger.error(
+            "Invalid menu action %s, for entry '%s'", act_item, menu_item
+        )
 
     def actLong(self):
         """
@@ -463,7 +475,7 @@ class Menu(Screen):
                 # let's exit back to our caller
                 self._passFocus(None)
             else:
-                logging.error("Already at the top level menu.")
+                self._logger.error("Already at the top level menu.")
             return
         # Pop the last parent an selection of the parents tree
         self.name, self._curr, self._selected = self._parents.pop()

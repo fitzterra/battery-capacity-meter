@@ -27,7 +27,7 @@ Attributes:
 from micropython import const
 import utime as time
 import uasyncio as asyncio
-from lib import ulogging as logging
+from lib.ulogging import getLogger
 from lib.uuid import shortUID
 
 from config import (
@@ -38,6 +38,7 @@ from config import (
     D_RECOVER_MIN_TM,
 )
 
+logger = getLogger(__name__)
 
 # This is a very simple signaling method to let the Telemetry task know it
 # needs to emit the telemetry for a specific BC.
@@ -338,7 +339,7 @@ class BCStateMachine:
         # Check for valid transition
         if event in self.TRANSITIONS[self.state]:
             self.state = self.TRANSITIONS[self.state][event]
-            logging.info(
+            logger.info(
                 "%s (FSM): Transitioned to state: %s (%s)",
                 self,
                 self.state_name,
@@ -346,7 +347,7 @@ class BCStateMachine:
             )
             return True
 
-        logging.error(
+        logger.error(
             "%s (FSM): Invalid event %s from state %s",
             self,
             self.EVENT_NAME.get(event, event),
@@ -672,7 +673,7 @@ class SoCStateMachine:
             # Then we can reset
             return self._bc.transition(self._bc.E_reset_metrics)
 
-        logging.error(
+        logger.error(
             "%s: BC in unexpected state while trying to reset to S_BAT_ID state : %s",
             self,
             self._bc.state_name,
@@ -695,16 +696,14 @@ class SoCStateMachine:
             True if the transition was successful, False otherwise, with any
             failures error logged.
         """
-        logging.info(
-            "%s: Transition request for event %s", self, self.EVENT_NAME[event]
-        )
+        logger.info("%s: Transition request for event %s", self, self.EVENT_NAME[event])
 
         # An EV_charge_complete event may be changed to an EV_cycle_complete
         # event if the battery is fully charged and we have reached the max
         # cycle count.
         if event == self.EV_charge_complete and self.cycle == self.cycles:
             event = self.EV_cycle_complete
-            logging.info(
+            logger.info(
                 "%s: Transition event %s changed to %s due SoC cycles completed.",
                 self,
                 self.EVENT_NAME[self.EV_charge_complete],
@@ -713,7 +712,7 @@ class SoCStateMachine:
 
         # Check for valid transition
         if event not in self.TRANSITIONS[self.state]:
-            logging.error(
+            logger.error(
                 "%s: Invalid event %s from state %s",
                 self,
                 self.EVENT_NAME.get(event, event),
@@ -723,7 +722,7 @@ class SoCStateMachine:
 
         # Make the transition
         self.state = self.TRANSITIONS[self.state][event]
-        logging.info(
+        logger.info(
             "%s: Transitioned to state: %s (%s)",
             self,
             self.state_name,
@@ -805,7 +804,7 @@ class SoCStateMachine:
         # Get a SoC measure uid
         self.uid = shortUID()
 
-        logging.info("%s: Starting BC State monitor for BC: %s", self, self._bc)
+        logger.info("%s: Starting BC State monitor for BC: %s", self, self._bc)
 
         # While we are not in a done state, we loop
         while self.state not in (self.ST_COMPLETE, self.ST_CANCEL, self.ST_ERROR):
@@ -827,7 +826,7 @@ class SoCStateMachine:
                     + f"'{self._bc.state_name}' for our '{self.state_name}' state. "
                     + "Transitioning to error state."
                 )
-                logging.error(err)
+                logger.error(err)
                 self.transition(self.EV_unexp_bc_state)
                 continue
 
@@ -886,7 +885,7 @@ class SoCStateMachine:
                     continue
 
                 if self.cycle_tm >= D_RECOVER_MAX_TM:
-                    logging.error(
+                    logger.error(
                         "%s: Battery voltage did not recover after "
                         "discharge and additional resting. "
                         "Aborting SoC measure.",
@@ -910,7 +909,7 @@ class SoCStateMachine:
             # should have.
 
         # We're done with the loop. Log and info message.
-        logging.info("%s: SoC measure done. Exiting BC monitor.", self)
+        logger.info("%s: SoC measure done. Exiting BC monitor.", self)
 
         # We want the telemetry broadcaster to immediately emit the telemetry
         # for this BC. We do this by signaling it through the telemetry_trigger
@@ -937,7 +936,7 @@ class SoCStateMachine:
 
         # We remove the trigger and log an error if still there.
         if self._bc in telemetry_trigger:
-            logging.error("%s: Telemetry was not emitted for this cycle.")
+            logger.error("%s: Telemetry was not emitted for this cycle.", self)
             telemetry_trigger.remove(self._bc)
 
         # Reset our state before we exit this coro
@@ -954,7 +953,7 @@ class SoCStateMachine:
         Returns:
             True on success, False on failure with an error message logged.
         """
-        logging.info("%s: Request to start SoC measure....", self)
+        logger.info("%s: Request to start SoC measure....", self)
 
         # We can reset to the ready state after a previous completed, canceled
         # or error run
@@ -963,7 +962,7 @@ class SoCStateMachine:
 
         # We can not start if we are not in the Ready state
         if self.state != self.ST_READY:
-            logging.error("%s: Can not start SoC measure from this state.", self)
+            logger.error("%s: Can not start SoC measure from this state.", self)
             return False
 
         # Start the monitor
