@@ -23,7 +23,7 @@ Required external libs:
 
 import uasyncio as asyncio
 import utime as time
-from lib import ulogging as logging
+from lib.ulogging import getLogger
 from lib.adc_monitor import VoltageMonitor, ChargeMonitor
 from lib.statemachines import (  # pylint: disable=unused-import
     BCStateMachine,
@@ -49,6 +49,8 @@ from config import (
 )
 
 from structures import ADCChannel, SpikeDetectCFG
+
+logger = getLogger("bat_ctl")
 
 
 class BatteryController(BCStateMachine):
@@ -131,11 +133,16 @@ class BatteryController(BCStateMachine):
         reason for being disabled. All other monitors for this controller will
         then also be set to disabled.
 
-        As of now, we automatically set up spike detection on the
-        `VoltageMonitor`, `_v_mon` only. We use the `V_SPIKE_TH` and
-        `V_SPIKE_TH_T` spike threshold values from ``config.py`` - see
-        `SpikeDetectCFG` for more info. The `_voltageSpike` callback will be
-        called when voltage spikes (battery insert / remove) was detected.
+        We automatically set up spike detection for all 3 monitors:
+
+        * For `_v_mon`, the spike threshold values are `V_SPIKE_TH` and
+          `V_SPIKE_TH_T` and the callback is `_voltageSpike`.
+        * For `_ch_mon` the thresholds are `C_SPIKE_TH` and `C_SPIKE_TH_T` with
+          the callback set to `_chargeSpike`.
+        * For `_dch_mon` the thresholds are `D_SPIKE_TH` and `D_SPIKE_TH_T`
+          with callback set to `_dischargeSpike`.
+
+        See `SpikeDetectCFG` for more.
 
         Note that asyncio monitor task for each of the monitors that are not
         disabled would also have been started, and will start running as soon
@@ -325,12 +332,12 @@ class BatteryController(BCStateMachine):
             if self.transition(self.E_get_id):
                 # Generate a new default unique battery ID.
                 self._bat_id = genBatteryID()
-                logging.info(
+                logger.info(
                     "%s: New battery inserted. Auto transitioned to waiting for ID",
                     self._bc_prefix,
                 )
             else:
-                logging.error(
+                logger.error(
                     "%s: Unable to auto transitioned to waiting for ID on new battery insert.",
                     self._bc_prefix,
                 )
@@ -408,7 +415,7 @@ class BatteryController(BCStateMachine):
             True if successful, False on error, with an error message logged.
         """
         if not (ch or dch):
-            logging.error(
+            logger.error(
                 "%s _cdControl: both ch and dch is False. Nothing to switch",
                 self._bc_prefix,
             )
@@ -416,7 +423,7 @@ class BatteryController(BCStateMachine):
 
         # We can not switch both controllers on
         if state and ch and dch:
-            logging.error(
+            logger.error(
                 "%s _cdControl: Can not switch on ch and dch simultaneously.",
                 self._bc_prefix,
             )
@@ -448,7 +455,7 @@ class BatteryController(BCStateMachine):
 
             # We can only switch the target on if the other is off.
             if pin_o.value():
-                logging.error(
+                logger.error(
                     "%s _cdControl: Can not switch on ch or dch while "
                     "the other is already on.",
                     self._bc_prefix,
@@ -475,7 +482,7 @@ class BatteryController(BCStateMachine):
             v_from: The value from which the jump occurred
             v_to: The value to which the jump occurred.
         """
-        logging.info(
+        logger.info(
             "%s: Voltage spike detected: %s (%s -> %s = %sv)",
             self._bc_prefix,
             "jump" if jump else "drop",
@@ -485,7 +492,7 @@ class BatteryController(BCStateMachine):
         )
         # Update the state if possible
         if not self.transition(self.E_v_jump if jump else self.E_v_drop):
-            logging.error(
+            logger.error(
                 "%s: State transition not valid for this spike currently/",
                 self._bc_prefix,
             )
@@ -502,7 +509,7 @@ class BatteryController(BCStateMachine):
             v_from: The value from which the jump occurred
             v_to: The value to which the jump occurred.
         """
-        logging.info(
+        logger.info(
             "%s: Charge spike detected: %s (%s -> %s)",
             self._bc_prefix,
             "jump" if jump else "drop",
@@ -512,7 +519,7 @@ class BatteryController(BCStateMachine):
         # Did we reach the end of charge?
         if self._v_mon.voltage > C_VOLTAGE_TH:
             if not self.transition(self.E_ch_done):
-                logging.error(
+                logger.error(
                     "%s: Unable to transition to fully charged.",
                     self._bc_prefix,
                 )
@@ -524,7 +531,7 @@ class BatteryController(BCStateMachine):
 
         # Update the state if possible
         if not self.transition(self.E_ch_jump if jump else self.E_ch_drop):
-            logging.error(
+            logger.error(
                 "%s: State transition not valid for this spike currently",
                 self._bc_prefix,
             )
@@ -559,7 +566,7 @@ class BatteryController(BCStateMachine):
         .. _DW01: https://www.best-microcontroller-projects.com/support-files/dw01a.pdf
         .. _TP4056: https://components101.com/modules/tp4056a-li-ion-battery-chargingdischarging-module
         """
-        logging.info(
+        logger.info(
             "%s: Discharge spike detected: %s (%s -> %s, bat_v: %s)",
             self._bc_prefix,
             "jump" if jump else "drop",
@@ -570,7 +577,7 @@ class BatteryController(BCStateMachine):
 
         # Update the state if possible
         if not self.transition(self.E_dch_jump if jump else self.E_dch_drop):
-            logging.error(
+            logger.error(
                 "%s: State transition not valid for this spike currently/",
                 self._bc_prefix,
             )
@@ -604,11 +611,11 @@ class BatteryController(BCStateMachine):
             successful, False with an error logged otherwise.
         """
         if not (bat_id is None or isinstance(bat_id, str)):
-            logging.error("%s: Invalid bat ID to setID(): %s", self._bc_prefix, bat_id)
+            logger.error("%s: Invalid bat ID to setID(): %s", self._bc_prefix, bat_id)
             return False
 
         if bat_id is not None and len(bat_id) > 10:
-            logging.error(
+            logger.error(
                 "%s: Bat ID can not be longer than 10 characters to setID(): %s",
                 self._bc_prefix,
                 bat_id,
@@ -633,7 +640,7 @@ class BatteryController(BCStateMachine):
         if self.transition(self.E_charge):
             return True
 
-        logging.error("%s: Unable to start charging.", self._bc_prefix)
+        logger.error("%s: Unable to start charging.", self._bc_prefix)
         return False
 
     async def _dischargeMonitor(self):
@@ -649,7 +656,7 @@ class BatteryController(BCStateMachine):
         Once discharge is complete, this coro will generate a
         `BCStateMachine.E_dch_done` event and exit.
         """
-        logging.info("%s: Starting discharge monitor.", self._bc_prefix)
+        logger.info("%s: Starting discharge monitor.", self._bc_prefix)
 
         # When we get here it may be right after a monitor reset which means
         # the voltage will not be correct. For this reason we pause here for a
@@ -675,13 +682,13 @@ class BatteryController(BCStateMachine):
 
         # We just exit on a yank
         if self.state == self.S_YANKED:
-            logging.info(
+            logger.info(
                 "%s: Exiting discharge monitor on battery being yanked.",
                 self._bc_prefix,
             )
             return
 
-        logging.info(
+        logger.info(
             "%s: Discharge complete with battery voltage at: %s. "
             "Exiting discharge monitor.",
             self._bc_prefix,
@@ -689,7 +696,7 @@ class BatteryController(BCStateMachine):
         )
 
         if not self.transition(self.E_dch_done):
-            logging.error(
+            logger.error(
                 "%s: Unable to transition to fully discharged. "
                 "Forcing Discharge off.",
                 self._bc_prefix,
@@ -718,7 +725,7 @@ class BatteryController(BCStateMachine):
         Once discharge is complete, this coro will generate a
         `BCStateMachine.E_ch_done` event and exit.
         """
-        logging.info("%s: Starting zero current charge monitor.", self._bc_prefix)
+        logger.info("%s: Starting zero current charge monitor.", self._bc_prefix)
 
         # When we get here it may be right after a monitor reset which means
         # the current will not be correct. For this reason we pause here for a
@@ -732,14 +739,14 @@ class BatteryController(BCStateMachine):
         # If we are still in the charge state, we are now completed and should
         # transition.
         if self.state == self.S_CHARGE:
-            logging.info(
+            logger.info(
                 "%s: Charge current fell to zero threshold (%s) without "
                 "triggering a spike. Setting charge completed.",
                 self._bc_prefix,
                 self._ch_mon.current,
             )
             if not self.transition(self.E_ch_done):
-                logging.error(
+                logger.error(
                     "%s: Unable to transition to fully charged. Forcing Charge off.",
                     self._bc_prefix,
                 )
@@ -748,7 +755,7 @@ class BatteryController(BCStateMachine):
         else:
             # If we get here, it would be because the spike detector stopped
             # charging. We simply log the state and do nothing more.
-            logging.info(
+            logger.info(
                 "%s: Charge current fell to zero threshold (%s) but not in "
                 "CHARGE state anymore. Ignoring this zero detection.",
                 self._bc_prefix,
@@ -757,7 +764,7 @@ class BatteryController(BCStateMachine):
 
         # All done, we should now not be in the charge state anymore, so we can
         # exit this monitor.
-        logging.info(
+        logger.info(
             "%s: Exiting zero current charge monitor.",
             self._bc_prefix,
         )
@@ -775,7 +782,7 @@ class BatteryController(BCStateMachine):
         if self.transition(self.E_discharge):
             return True
 
-        logging.error("%s: Unable to start discharging.", self._bc_prefix)
+        logger.error("%s: Unable to start discharging.", self._bc_prefix)
         return False
 
     def pause(self):
@@ -794,7 +801,7 @@ class BatteryController(BCStateMachine):
         if self.transition(self.E_pause):
             return True
 
-        logging.error("%s: Unable to pause at the moment.", self._bc_prefix)
+        logger.error("%s: Unable to pause at the moment.", self._bc_prefix)
         return False
 
     def resume(self):
@@ -813,7 +820,7 @@ class BatteryController(BCStateMachine):
         if self.transition(self.E_resume):
             return True
 
-        logging.error("%s: Unable to resume at the moment.", self._bc_prefix)
+        logger.error("%s: Unable to resume at the moment.", self._bc_prefix)
         return False
 
     def resetMetrics(self) -> bool:
@@ -830,7 +837,7 @@ class BatteryController(BCStateMachine):
         if self.transition(self.E_reset_metrics):
             return True
 
-        logging.error("%s: Unable to reset metrics at the moment.", self._bc_prefix)
+        logger.error("%s: Unable to reset metrics at the moment.", self._bc_prefix)
         return False
 
     def socMeasureToggle(self):
@@ -845,7 +852,7 @@ class BatteryController(BCStateMachine):
         Returns:
             True on success, False on error with an error logged.
         """
-        logging.info("%s: SoC measure toggle request. SoC: %s", self, self.soc_m)
+        logger.info("%s: SoC measure toggle request. SoC: %s", self, self.soc_m)
 
         # Starting or cancelling the SoC Measure depends on the state of the
         # SoC FSM
@@ -855,15 +862,15 @@ class BatteryController(BCStateMachine):
             # the S_BAT_ID state
             if self.state == self.S_BAT_ID:
                 if self.soc_m.start():
-                    logging.info("%s: SoC measure started.", self)
+                    logger.info("%s: SoC measure started.", self)
                     return True
 
-                logging.error(
+                logger.error(
                     "%s: Error starting SoC measure.",
                     self,
                 )
             else:
-                logging.error(
+                logger.error(
                     "%s: SoC FSM is ready to measure SoC but we are not in the "
                     "correct state for that.",
                     self,
@@ -872,10 +879,10 @@ class BatteryController(BCStateMachine):
 
         # The Soc FSM is not in the ready state, so we should be able to cancel it.
         if self.soc_m.cancel():
-            logging.info("%s: Cancelled current Soc measurement process.", self)
+            logger.info("%s: Cancelled current Soc measurement process.", self)
             return True
 
-        logging.error("%s: Error cancelling current SoC measurement process.", self)
+        logger.error("%s: Error cancelling current SoC measurement process.", self)
 
         return False
 
@@ -892,5 +899,5 @@ class BatteryController(BCStateMachine):
         if self.transition(self.E_reset):
             return True
 
-        logging.error("%s: Unable to reset the state currently.", self._bc_prefix)
+        logger.error("%s: Unable to reset the state currently.", self._bc_prefix)
         return False

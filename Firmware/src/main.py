@@ -8,10 +8,12 @@ import uasyncio as asyncio
 from config import HARDWARE_CFG
 from lib.bat_controller import BatteryController
 from lib.utils import stdinKeyMonitor
-from lib import ulogging as logging
+from lib.ulogging import getLogger
 from telemetry import broadcast
 
 from screens import uiSetup
+
+logger = getLogger(__name__)
 
 
 def asyncIOExeption(loop, context):
@@ -51,7 +53,7 @@ class BCSerialUI:
         """
         # We need at least one
         if not bcs:
-            logging.error(
+            logger.error(
                 "%s: At least one BatteryController needed. Aborting.",
                 self.__class__.__name__,
             )
@@ -72,7 +74,7 @@ class BCSerialUI:
         # Start the status monitor task
         asyncio.create_task(self.statusMonitor())
         # And the key monitor will key input call back to keyInput
-        asyncio.create_task(stdinKeyMonitor({"_default_": (self.keyInput,)}, logging))
+        asyncio.create_task(stdinKeyMonitor({"_default_": (self.keyInput,)}, logger))
 
     def setActive(self, idx: int):
         """
@@ -82,7 +84,7 @@ class BCSerialUI:
             idx: Index into `bcs` for the BC to make active.
         """
         if not 0 <= idx < len(self.bcs):
-            logging.error(
+            logger.error(
                 "%s : Invalid BC index to make active: %s", self.__class__.__name__, idx
             )
             return
@@ -241,15 +243,15 @@ def main():
     Main entry
     """
     # Instantiate all configured battery controllers
-    logging.info("Instantiating BatteryControllers...")
+    logger.info("Instantiating BatteryControllers...")
     bat_ctls = [BatteryController(*c) for c in HARDWARE_CFG]
 
     # Instantiate the serial UI monitor
-    logging.info("Setting up Serial UI...")
+    logger.info("Setting up Serial UI...")
     BCSerialUI(bat_ctls)
 
     # Set up the main UI
-    logging.info("Setting up OLED UI...")
+    logger.info("Setting up OLED UI...")
     uiSetup(bat_ctls)
 
     loop = asyncio.get_event_loop()

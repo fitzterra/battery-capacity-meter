@@ -27,11 +27,14 @@ import json
 import ntptime
 import utime as time
 import uasyncio as asyncio
-from lib import ulogging as logging
+from lib.ulogging import telemetry_logs
+from lib.ulogging import getLogger
 from lib.mqtt_as import MQTTClient, config
 from lib.bat_controller import BatteryController, telemetry_trigger
 import net_conf
 from config import TELEMETRY_EMIT_FREQ
+
+logger = getLogger(__name__)
 
 
 async def clientUp(client):
@@ -48,7 +51,7 @@ async def clientUp(client):
         # We need to clear the event to signal that we noticed it.
         client.up.clear()
 
-        logging.info("Network: Connection is up.")
+        logger.info("Network: Connection is up.")
 
         # Subscribe to any topics defined
         await client.subscribe(net_conf.MQTT_CTL_TOPIC, 0)
@@ -57,9 +60,9 @@ async def clientUp(client):
         try:
             # We use the default `pool.ntp.org` time servers for the time.
             ntptime.settime()
-            logging.info("Network: Time synced to pool.ntp.org.")
+            logger.info("Network: Time synced to pool.ntp.org.")
         except Exception as exc:
-            logging.error("Network: Error syncing time: %s", exc)
+            logger.error("Network: Error syncing time: %s", exc)
 
 
 async def clientDown(client):
@@ -74,7 +77,7 @@ async def clientDown(client):
         # We need to clear the event to signal that we noticed it.
         client.down.clear()
 
-        logging.error(
+        logger.error(
             "Network: WiFi or broker is down. Auto reconnect will be attempted."
         )
 
@@ -84,7 +87,7 @@ async def messages(client):
     Manage control messages received via MQTT.
     """
     async for topic, msg, retained in client.queue:
-        logging.info("MQTT CTL: %s, %s, %s", topic.decode(), msg.decode(), retained)
+        logger.info("MQTT CTL: %s, %s, %s", topic.decode(), msg.decode(), retained)
 
 
 def buildMsg(bc: BatteryController) -> dict:
@@ -190,7 +193,7 @@ async def broadcast(bcs: list[BatteryController,]):
     and by extension the WiFi connection. The `MQTTClient` will do a best
     effort attempt to re-establish network connections if it gets lost.
 
-    Besides monitoring the ``BC`` statusses, it also monitors
+    Besides monitoring the ``BC`` statuses, it also monitors
     `telemetry_trigger` and `telemetry_logs` for messages to publish.
 
     Normal BC telemetry is published on this topic::
@@ -287,9 +290,9 @@ async def broadcast(bcs: list[BatteryController,]):
             await client.publish(topic, json.dumps(msg), qos=0)
 
         # And also emit any logs
-        while logging.telemetry_logs:
+        while telemetry_logs:
             # Remove the earliest log entry
-            lvl, msg = logging.telemetry_logs.pop(0)
+            lvl, msg = telemetry_logs.pop(0)
 
             topic = f"{net_conf.MQTT_LOG_TOPIC}/{lvl}"
             await client.publish(topic, msg, qos=0)

@@ -4,7 +4,7 @@ UI Output bases functionality
 
 import uasyncio as asyncio
 from ssd1306 import SSD1306_I2C
-from lib import ulogging as logging
+from lib.ulogging import getLogger
 from .ui_input import (
     EV_ROTATE,
     EV_BUTTON,
@@ -13,6 +13,8 @@ from .ui_input import (
     SHORT_PRESS,
     LONG_PRESS,
 )
+
+_logger = getLogger(__name__)
 
 
 class Screen:
@@ -101,7 +103,7 @@ class Screen:
     # See class docstring Attributes definition for more info
     AUTO_REFRESH = 0
 
-    def __init__(self, name: str, px_w: int, px_h: int):
+    def __init__(self, name: str, px_w: int, px_h: int, logger=_logger):
         """
         Instance init.
 
@@ -111,6 +113,8 @@ class Screen:
                 is doing what.
             px_w: The screen width in pixels
             px_h: Screen height in pixels
+            logger: An optional application logging instance to use for all
+                logs. Defaults to `ulogging` if not supplied.
         """
         # Save the instance name and screen size
         self.name = name
@@ -145,6 +149,8 @@ class Screen:
         # The `_passFocus` and `focus` methods will work together to then
         # restore our caller's screen reference if need be.
         self._save_focus_on_exit = None
+
+        self._logger = logger
 
     def __str__(self):
         """
@@ -419,7 +425,7 @@ class Screen:
                 # Nothing to clear, get out
                 return
             if lines_to_clear < 0:
-                logging.error(
+                self._logger.error(
                     "Screen %s: _clear - can not clear %s number of lines",
                     self.name,
                     lines_to_clear,
@@ -485,7 +491,7 @@ class Screen:
         focus again.
         """
         # pylint: disable=too-many-branches
-        logging.debug("Screen %s: Starting asyncio input monitor", self.name)
+        self._logger.debug("Screen %s: Starting asyncio input monitor", self.name)
 
         while self._display is not None:
             # We wait for input
@@ -508,7 +514,7 @@ class Screen:
             if self._event_in is None:
                 continue
 
-            logging.debug(
+            self._logger.debug(
                 "Screen %s: Input event: %s - %s",
                 self.name,
                 self._event_in.e_type,
@@ -526,7 +532,7 @@ class Screen:
                 elif self._event_in.e_val == DIR_CCW:
                     self.actCCW()
                 else:
-                    logging.error(
+                    self._logger.error(
                         "Screen %S: Not a valid rotation direction: %s",
                         self.name,
                         self._event_in.e_val,
@@ -537,13 +543,13 @@ class Screen:
                 elif self._event_in.e_val == LONG_PRESS:
                     self.actLong()
                 else:
-                    logging.error(
+                    self._logger.error(
                         "Screen %s: Not a valid button press value: %s",
                         self.name,
                         self._event_in.e_val,
                     )
             else:
-                logging.error(
+                self._logger.error(
                     "Screen %s: Invalid event type: %s",
                     self.name,
                     self._event_in.e_type,
@@ -553,7 +559,7 @@ class Screen:
             if self._event_in is not None:
                 self._event_in.clear()
 
-        logging.info("Screen %s: Exiting input event monitor", self.name)
+        self._logger.info("Screen %s: Exiting input event monitor", self.name)
 
     async def _refresh(self):
         """
@@ -576,13 +582,13 @@ class Screen:
         This task will auto terminate when the screen looses focus, but will
         again be started when getting focus later.
         """
-        logging.info("Screen %s: Starting auto refresh task.", self.name)
+        self._logger.info("Screen %s: Starting auto refresh task.", self.name)
 
         while self._display is not None:
             self.update()
             await asyncio.sleep_ms(self.AUTO_REFRESH)
 
-        logging.info("Screen %s: Exiting auto refresh task.", self.name)
+        self._logger.info("Screen %s: Exiting auto refresh task.", self.name)
 
     def focus(
         self, display: SSD1306_I2C, event: asyncio.Event, focus_on_exit: "Screen" = None
@@ -672,7 +678,9 @@ class Screen:
         if screen is None:
             screen = self._focus_on_exit
 
-        logging.info("Screen %s: Passing focus to screen %s", self.name, screen.name)
+        self._logger.info(
+            "Screen %s: Passing focus to screen %s", self.name, screen.name
+        )
 
         # Before passing the event, lets just clear it
         self._event_in.clear()
@@ -726,7 +734,7 @@ class Screen:
 
         The derived class should override this if needed.
         """
-        logging.info("Screen %s: Ignoring the UP action.", self.name)
+        self._logger.info("Screen %s: Ignoring the UP action.", self.name)
 
     def actCW(self):
         """
@@ -734,7 +742,7 @@ class Screen:
 
         The derived class should override this if needed.
         """
-        logging.info("Screen %s: Ignoring the DOWN action.", self.name)
+        self._logger.info("Screen %s: Ignoring the DOWN action.", self.name)
 
     def actShort(self):
         """
@@ -749,12 +757,14 @@ class Screen:
 
         The derived class could override this if needed.
         """
-        logging.info("Screen %s: Received the SHORT PRESS action.", self.name)
+        self._logger.info("Screen %s: Received the SHORT PRESS action.", self.name)
         if self._focus_on_exit is not None:
-            logging.info("Screen %s: Auto returning focus on short click", self.name)
+            self._logger.info(
+                "Screen %s: Auto returning focus on short click", self.name
+            )
             self._passFocus(None)
         else:
-            logging.info("Screen %s: Ignoring the SHORT PRESS action.", self.name)
+            self._logger.info("Screen %s: Ignoring the SHORT PRESS action.", self.name)
 
     def actLong(self):
         """
@@ -762,4 +772,4 @@ class Screen:
 
         The derived class should override this if needed.
         """
-        logging.info("Screen %s: Ignoring the LONG PRESS action.", self.name)
+        self._logger.info("Screen %s: Ignoring the LONG PRESS action.", self.name)

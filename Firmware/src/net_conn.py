@@ -35,9 +35,11 @@ import ntptime
 import uasyncio as asyncio
 import network
 from micropython import const
-from lib import ulogging as logger
+from lib.ulogging import getLogger
 from lib.led import LED
 import net_conf
+
+logger = getLogger(__name__)
 
 # Warning: not very Pythonic :-(
 # We predefine the expected values from the connection.py settings file here

@@ -17,8 +17,10 @@ Attributes:
 """
 
 from micropython import const
-from lib import ulogging as logging
+from lib.ulogging import getLogger
 from .ui_output import Screen
+
+_logger = getLogger(__name__)
 
 # Cursor controls
 C_SHOW: int = const(0)
@@ -151,6 +153,7 @@ class FieldEdit(Screen):
         f_type: str = "num",
         setter: callable | None = None,
         field_id: int | None = None,
+        logger=_logger,
     ):
         """
         Overrides base init to add additional init args.
@@ -176,7 +179,7 @@ class FieldEdit(Screen):
         # @pylint: disable=too-many-arguments,too-many-positional-arguments
 
         # We use the screen Name for the field label
-        super().__init__(name, px_w, px_h)
+        super().__init__(name, px_w, px_h, logger=logger)
 
         # Set the max length to the full display with if 0, else limit to the
         # maximum display characters length
@@ -375,7 +378,7 @@ class FieldEdit(Screen):
         actions the button when on a button
         """
         if self._cursor >= 0:
-            logging.debug("Toggling edit mode.")
+            self._logger.debug("Toggling edit mode.")
             # Remove cursor
             self._setCursor(C_HIDE)
             # Toggle the mode
@@ -397,11 +400,11 @@ class FieldEdit(Screen):
         currently in the field.
         """
         if self._cursor < 0:
-            logging.error("Can only delete end if in field.")
+            self._logger.error("Can only delete end if in field.")
             return
         # If val is empty, we can ignore it
         if len(self._val) == 0:
-            logging.error("Value is already empty, ignoring delete.")
+            self._logger.error("Value is already empty, ignoring delete.")
             return
 
         # Hide cursor

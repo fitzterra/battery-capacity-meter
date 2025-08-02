@@ -48,7 +48,7 @@ import gc
 from micropython import const
 from machine import Pin
 from ssd1306 import SSD1306_I2C
-from lib import ulogging as logging
+from lib.ulogging import getLogger
 from lib.bat_controller import BatteryController
 from ui import (
     Screen,
@@ -73,6 +73,8 @@ from sitelocal_conf import updateLocal
 
 # from interface import MODE_CHARGING, MODE_DISCHARGING
 from version import VERSION
+
+logger = getLogger(__name__)
 
 # These are constants defining the ellipses quadrants to draw
 # There are 4 quadrants from Q1 to Q4 starting in the top right
@@ -292,15 +294,15 @@ class FootMenu:
         active (`_active`) `menu` option if supplied, or else, the general
         `_callback` if supplied.
 
-        If neither callback is available, nothing will be done other logging a
-        message.
+        If neither callback is available, nothing will be done other than
+        logging a message.
 
         This is normally called from the `Screen.actShort()` event method when
         a short press event is received.
         """
         opt = self.menu[self._active]
 
-        logging.info(
+        logger.info(
             "FootMenu for Screen %s: Activate option '%s'",
             self._screen.name,
             opt[self.OPT_OPT],
@@ -308,16 +310,14 @@ class FootMenu:
 
         cb = opt[self.OPT_CB] or self._callback
         if not cb:
-            logging.info(
+            logger.info(
                 "FootMenu for Screen %s: No callback for option '%s'",
                 self._screen.name,
                 opt[self.OPT_OPT],
             )
             return
 
-        logging.info(
-            "FootMenu for Screen %s: going to call '%s'", self._screen.name, cb
-        )
+        logger.info("FootMenu for Screen %s: going to call '%s'", self._screen.name, cb)
         cb(opt[self.OPT_OPT])
 
 
@@ -346,7 +346,7 @@ class Boot(Screen):
             name, px_w, px_h: See `Screen.__init__`
             bcms: The number of BCMs available.
         """
-        super().__init__(name, px_w, px_h)
+        super().__init__(name, px_w, px_h, logger=logger)
         self.num_bcms = bcms
 
     def _drawLogo(self, x: int, y: int, rad: int = 12, show: bool = False):
@@ -406,6 +406,12 @@ class MemoryUsage(Screen):
     ALLOC_Y = 3
     FREE_Y = 5
     FREE_P_Y = 7
+
+    def __init__(self, name: str, px_w: int, px_h: int):
+        """
+        Overrides init to set our local logger.
+        """
+        super().__init__(name, px_w, px_h, logger=logger)
 
     def setup(self):
         """
@@ -527,7 +533,7 @@ class Calibration(Screen):
             name, px_w, px_h:  See `Screen` base class documentation.
             bcms: List of `BatteryController` instance to calibrate.
         """
-        super().__init__(name, px_w, px_h)
+        super().__init__(name, px_w, px_h, logger=logger)
 
         self._bcms = bcms
 
@@ -669,7 +675,9 @@ class Calibration(Screen):
         self._curr_mon._shunt += val
         # We can not let this value go equal to or below zero
         if self._shunt <= 0:
-            logging.error("Screen %s: Shunt value can not go below zero.", self.name)
+            self._logger.error(
+                "Screen %s: Shunt value can not go below zero.", self.name
+            )
             # Return to previous
             self._curr_mon._shunt -= val
 
@@ -713,14 +721,14 @@ class Calibration(Screen):
 
             updateLocal(conf_name, shunt_conf)
         except Exception as exc:
-            logging.error(
+            self._logger.error(
                 "Screen %s: Error saving local calibrated shunt.  Error: %s",
                 self.name,
                 exc,
             )
             return
 
-        logging.info(
+        self._logger.info(
             "Screen %s: Saved calibration %s=%s to site local shunt_conf_local.py",
             self.name,
             conf_name,
@@ -808,7 +816,9 @@ class Calibration(Screen):
             super().actCCW()
             return
 
-        logging.info("Screen %s: Selecting previous footer menu option.", self.name)
+        self._logger.info(
+            "Screen %s: Selecting previous footer menu option.", self.name
+        )
         self._foot_menu.selectNext(-1)
 
     def actCW(self):
@@ -834,7 +844,7 @@ class Calibration(Screen):
             super().actCW()
             return
 
-        logging.info("Screen %s: Selecting next footer menu option.", self.name)
+        self._logger.info("Screen %s: Selecting next footer menu option.", self.name)
         self._foot_menu.selectNext(1)
 
     def actShort(self):
@@ -851,7 +861,7 @@ class Calibration(Screen):
         """
         # If we're calibrating, this click means we are exiting.
         if self._state == self.S_CALIB:
-            logging.info("Screen %s: Completed calibration.", self.name)
+            self._logger.info("Screen %s: Completed calibration.", self.name)
             # Switch off both charge and discharge controllers.
             # It's OK to use _cdControl here @pylint: disable=protected-access
             self._bc._cdControl(state=False, ch=True, dch=True)
@@ -869,7 +879,9 @@ class Calibration(Screen):
             super().actShort()
             return
 
-        logging.info("Screen %s: Activating selected footer menu option.", self.name)
+        self._logger.info(
+            "Screen %s: Activating selected footer menu option.", self.name
+        )
         self._foot_menu.activate()
 
     def actLong(self):
@@ -883,7 +895,7 @@ class Calibration(Screen):
         """
         # Ignore this if we're busy calibrating
         if self._state == self.S_CALIB:
-            logging.error(
+            self._logger.error(
                 "Screen %s: Ignoring long press while calibrating.", self.name
             )
             return
@@ -927,7 +939,7 @@ class Calibration(Screen):
             # The opt value is an index into self._bcms, but is a string.
             # Convert to int and set pointer to local BC being used
             self._bc = self._bcms[int(opt)]
-            logging.info(
+            self._logger.info(
                 "Screen %s: Going to calibrate BC: %s",
                 self.name,
                 self._bc.name,
@@ -1012,17 +1024,17 @@ def updateConfig(
     elif conf_mod == "net_conf":
         rt_conf = net_conf
     else:
-        logging.error("updateConfig: Not a valid config module name: %s", conf_mod)
+        logger.error("updateConfig: Not a valid config module name: %s", conf_mod)
         return
 
     if const_name:
         conf_name = const_name
 
-    logging.info("updateConfig: Config update request for config: '%s'", conf_name)
+    logger.info("updateConfig: Config update request for config: '%s'", conf_name)
 
     # Make sure the config option is an attribute of config.
     if not hasattr(rt_conf, conf_name):
-        logging.error(
+        logger.error(
             "updateConfig: No config constant named '%s' in module '%s' "
             "to update the value for.",
             conf_name,
@@ -1043,7 +1055,7 @@ def updateConfig(
             try:
                 val = int(val)
             except Exception as ex:
-                logging.error(
+                logger.error(
                     "updateConfig: Error converting %s to int for setting the "
                     "`%s.%s' config value. Error: %s",
                     val,
@@ -1053,7 +1065,7 @@ def updateConfig(
                 )
                 return
 
-        logging.info(
+        logger.info(
             "updateConfig: Setting site local config: %s.%s=%s",
             conf_mod,
             conf_name,
@@ -1183,7 +1195,7 @@ class BCMView(Screen):
             name, px_w, px_h:  See `Screen` base class documentation.
             bcms: List of `BatteryController` instance to control and monitor.
         """
-        super().__init__(name, px_w, px_h)
+        super().__init__(name, px_w, px_h, logger=logger)
         self._bcms: list[BatteryController] = bcms
         self._active_bcm: int | None = None
         self._bc: BatteryController | None = None
@@ -1255,7 +1267,7 @@ class BCMView(Screen):
                 idx = 0
 
         if not isinstance(idx, int):
-            logging.error("Screen %s: invalid bcm index to set: %s", self.name, idx)
+            logger.error("Screen %s: invalid bcm index to set: %s", self.name, idx)
             return
 
         # Make it active
@@ -1327,11 +1339,11 @@ class BCMView(Screen):
             _: Ignored field ID received from caller.
         """
         if self._bc.setID(val.decode("ascii")):
-            logging.info(
+            logger.info(
                 "Screen %s: Battery ID was set to: %s", self.name, self._bc.bat_id
             )
         else:
-            logging.error(
+            logger.error(
                 "Screen %s: Error setting battery ID.", self.name, self._bc.bat_id
             )
 
@@ -1383,7 +1395,7 @@ class BCMView(Screen):
 
         # Have we created the footer menu yet?
         if self._foot_menu is None:
-            logging.info("Creating and showing footer menu for S_BAT_ID state.")
+            logger.info("Creating and showing footer menu for S_BAT_ID state.")
             # Create the footer menu, and draw it
             self._foot_menu = FootMenu(
                 self,
@@ -1448,7 +1460,7 @@ class BCMView(Screen):
 
         # Have we created the footer menu yet?
         if self._foot_menu is None:
-            logging.debug(
+            logger.debug(
                 "Creating and showing footer menu for S_CHARGE/S_DISCHARGE state."
             )
             # The footer menu depends on whether we are busy with a SoC
@@ -1535,7 +1547,7 @@ class BCMView(Screen):
             self._foot_menu is None
             or self._bc.soc_m.state == self._bc.soc_m.ST_COMPLETE
         ):
-            logging.debug(
+            logger.debug(
                 "Creating and showing footer menu for S_CHARGED/S_DISCHARGED state."
             )
             # The footer menu is slightly different depending on this being a
@@ -1600,7 +1612,7 @@ class BCMView(Screen):
 
         # Have we created the footer menu yet?
         if self._foot_menu is None:
-            logging.info("Creating and showing footer menu for S_YANKED state.")
+            logger.info("Creating and showing footer menu for S_YANKED state.")
             # Create the footer menu, and draw it
             self._foot_menu = FootMenu(
                 self,
@@ -1731,7 +1743,7 @@ class BCMView(Screen):
             super().actCCW()
             return
 
-        logging.info("Screen %s: Selecting previous footer menu option.", self.name)
+        logger.info("Screen %s: Selecting previous footer menu option.", self.name)
         self._foot_menu.selectNext(-1)
 
     def actCW(self):
@@ -1746,7 +1758,7 @@ class BCMView(Screen):
             super().actCW()
             return
 
-        logging.info("Screen %s: Selecting next footer menu option.", self.name)
+        logger.info("Screen %s: Selecting next footer menu option.", self.name)
         self._foot_menu.selectNext(1)
 
     def actShort(self):
@@ -1761,7 +1773,7 @@ class BCMView(Screen):
             super().actShort()
             return
 
-        logging.info("Screen %s: Activating selected footer menu option.", self.name)
+        logger.info("Screen %s: Activating selected footer menu option.", self.name)
         self._foot_menu.activate()
 
     def actLong(self):
@@ -1774,7 +1786,7 @@ class BCMView(Screen):
         This will call `_activateBCM()` passing the ID to activate as ``">"`` to
         activate the next BCM in `_bcms`.
         """
-        logging.info("Screen %s: Activating next BCM.", self.name)
+        logger.info("Screen %s: Activating next BCM.", self.name)
         self._foot_menu = None
         self._activateBCM(">")
 
@@ -1841,7 +1853,7 @@ class BCMView(Screen):
                 self._bc.resetMetrics()
 
         else:
-            logging.info("Received invalid option from footer menu: %s", opt)
+            logger.info("Received invalid option from footer menu: %s", opt)
 
 
 def uiSetup(bcms: list):
@@ -1868,7 +1880,7 @@ def uiSetup(bcms: list):
         bcms: A list of `BatteryController` instances to create BCMView
             screens for.
     """
-    logging.info("Setting up UI..")
+    logger.info("Setting up UI..")
 
     # Encoder setup
     setupEncoder(
@@ -1894,9 +1906,9 @@ def uiSetup(bcms: list):
         ),
         ("Memory usage", MemoryUsage("Memory Usage", OLED_W, OLED_H)),
     )
-    main_menu = Menu("MainMenu", OLED_W, OLED_H, main_menu_def, True)
+    main_menu = Menu("MainMenu", OLED_W, OLED_H, main_menu_def, True, logger=logger)
 
     # Set up the boot screen and give it focus it
     bootscreen = Boot(f"BCM v{VERSION}", OLED_W, OLED_H, len(bcms))
-    logging.info("  Passing focus to boot screen.")
+    logger.info("  Passing focus to boot screen.")
     bootscreen.focus(oled, input_evt, focus_on_exit=main_menu)

@@ -12,6 +12,32 @@ Attributes:
     INFO: Constant for INFO logolevel.
     DEBUG: Constant for DEBUG logolevel.
     NOTSET: Constant for NOTSET logolevel.
+    LOGGING_CFG: A dictionary of logger names with switches to disabled logging
+      per destination.
+
+      This dict is imported from `config.LOGGING_CFG` and set to the empty dict
+      on import error, effectively enabling logging for all named loggers.
+
+      The structure is as follows:
+
+      .. python::
+        {
+            'logger_name': {
+                'log': bool,
+                'telem': bool
+            },
+            ...
+        }
+
+      The ``logger_name`` is a named logger set up via `getLogger`. The ``log``
+      and ``telem`` switches enables/disables log emission for normal logging
+      (console or file) and/or telemetry logging (via `Logger.telemetry_log`)
+      respectively.
+
+      Defaults are to try always enable all logging (no logger name key, either
+      destination keys not present) and only disable specifically if the name
+      and it destination key evaluates to a *falsy* value.
+
     _level_dict: Mapping of log level constants to strings.
     _stream: The file type object to write log messages to.
     telemetry_logs: A FIFO list for log messages to be emitted as telemetry
@@ -40,6 +66,11 @@ Attributes:
 
 import sys as usys
 
+try:
+    from config import LOGGING_CFG
+except ImportError:
+    LOGGING_CFG = {}
+
 CRITICAL = 50
 ERROR = 40
 WARNING = 30
@@ -62,7 +93,6 @@ _stream = usys.stderr
 telemetry_logs = []
 
 _level = INFO
-_level_telemertry = ERROR
 _loggers = {}
 
 
@@ -76,7 +106,7 @@ class Logger:
 
     def __init__(self, name: str):
         self.name = name
-        self.name_out = "" if not name else f"{name}"
+        self.name_out = "" if not name else f" [{name}]"
 
     def _level_str(self, level: int):
         l = _level_dict.get(level)
@@ -93,14 +123,24 @@ class Logger:
         """
         self.level = level
 
-    def isEnabledFor(self, level: int):
+    def isEnabledFor(self, level: int, dest: str = "log"):
         """
-        Checks if logging is enabled for the given level by comparing it
-        against the current log level.
+        Checks if logging is enabled for the given level, logger name and
+        destination.
+
+        Logging for a specific logger name can be disabled by destination - see
+        `LOGGING_CFG`
 
         Args:
             level: Level to test
+            dest: Logging destination: ``log`` for standard logging, ``telem`` for
+                telemetry logging.
         """
+        # Only accept as disabled if the logger and destination is specifically
+        # set to falsy
+        if not LOGGING_CFG.get(self.name, {}).get(dest, True):
+            return False
+
         return level >= (self.level or _level)
 
     def telemetry_log(self, level: int, msg: str, *args):
@@ -111,17 +151,11 @@ class Logger:
         We are called from `log` after doing the stream logging.
 
         .. note::
-
-            The level for telemetry logging is only determined by
-            `_level_telemertry` which can be changed from the default ``ERROR``
-            to any any other level by calling `setTelemetryLevel`.
-
-        .. note::
             To protect against `telemetry_logs` growing uncontrollably if the
             network is down for example, we will remove the oldest message
             where if the log is longer than 20 messages.
         """
-        if level >= _level_telemertry:
+        if self.isEnabledFor(level, "telem"):
             # Protect against runaway logs
             if len(telemetry_logs) >= 20:
                 telemetry_logs.pop(0)
@@ -148,7 +182,7 @@ class Logger:
                 string interpolation.
             *args: Any value(s) to interpolate into msg if needed.
         """
-        if level >= (self.level or _level):
+        if self.isEnabledFor(level):
             _stream.write(f"{self._level_str(level)}{self.name_out}:")
             if not args:
                 print(msg, file=_stream)
@@ -233,14 +267,6 @@ def debug(msg: str, *args):
     Quick helper function to log a debug message.
     """
     getLogger(None).debug(msg, *args)
-
-
-def setTelemetryLevel(level: int = ERROR):
-    """
-    Sets the level at which to send logs as telemetry logs.
-    """
-    global _level_telem
-    _level_telem = level
 
 
 def basicConfig(

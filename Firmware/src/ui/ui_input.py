@@ -27,7 +27,9 @@ from micropython import const
 from machine import Pin
 from lib.uencoder import Encoder, DIR_CCW, DIR_CW
 from lib.ubutton import uButton
-from lib import ulogging as logging
+from lib.ulogging import getLogger
+
+logger = getLogger(__name__)
 
 # Event type indicators
 EV_ROTATE = const(1)
@@ -73,12 +75,12 @@ async def rotationMonitor():
     When a rotation event is detected, we will set `input_evt` and also the
     ``e_type`` and ``e_val`` attributes as noted for this sync primitive.
     """
-    logging.debug("Starting rotationMonitor.")
+    logger.debug("Starting rotationMonitor.")
     # Monitor continuously
     while True:
         # Wait for the event
         await rotate_evt.wait()
-        logging.debug(
+        logger.debug(
             "Rotation event: %s", "CW" if rotate_evt.rot_dir == DIR_CW else "CCW"
         )
         # Translate to input event
@@ -118,7 +120,7 @@ def rotateISR(direction: DIR_CW | DIR_CCW):
 
     .. _Event: https://docs.micropython.org/en/latest/library/asyncio.html#class-event
     """
-    logging.debug("Encoder rotation callback. dir: %s", direction)
+    logger.debug("Encoder rotation callback. dir: %s", direction)
     # We ignore the direction while it is still settling
     if direction == 0:
         return
@@ -127,7 +129,7 @@ def rotateISR(direction: DIR_CW | DIR_CCW):
     # direction.
     rotate_evt.rot_dir = direction
     rotate_evt.set()
-    logging.debug("Set rotate_evt...")
+    logger.debug("Set rotate_evt...")
 
 
 def buttonPressed(which: SHORT_PRESS | LONG_PRESS):
@@ -140,7 +142,7 @@ def buttonPressed(which: SHORT_PRESS | LONG_PRESS):
     Args:
         which: Indicates if it was short or long press.
     """
-    logging.debug("Button pressed: %s", "Short" if which == SHORT_PRESS else "Long")
+    logger.debug("Button pressed: %s", "Short" if which == SHORT_PRESS else "Long")
     input_evt.e_type = EV_BUTTON
     input_evt.e_val = which
     input_evt.set()
@@ -177,7 +179,7 @@ def setupEncoder(
 
     .. _KY-040: https://components101.com/modules/KY-04-rotary-encoder-pinout-features-datasheet-working-application-alternative
     """
-    logging.debug(
+    logger.debug(
         "setting up encoder. clk_pin: %s, dat_pin: %s, sw_pin: %s",
         clk_pin,
         dat_pin,

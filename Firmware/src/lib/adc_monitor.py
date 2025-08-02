@@ -12,11 +12,13 @@ import utime as time
 
 from i2c_config import AVAILABLE_ADCS
 
-from lib import ulogging as logger
+from lib.ulogging import getLogger
 from lib.ads1x15 import ADS1115
 from lib.utils import ewAverage
 
 from structures import ADCChannel, SpikeDetectCFG
+
+logger = getLogger(__name__)
 
 
 class ADCMonitor:
