@@ -51,8 +51,6 @@ Attributes:
         or have any issues, `Logger.telemetry_log` will keep this list to not
         grow beyond 20 messages, removing older messages if needed.
     _level: The global log level. Can be changed via `basicConfig`
-    _level_telemertry: The level for logging as telelmetry logs. Can be changed
-        via `setTelemetryLevel`
     _loggers: Cached name `Logger` instances.
 
         The `getLogger` function will cache an instance of the named logger in

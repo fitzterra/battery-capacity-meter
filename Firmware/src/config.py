@@ -1,82 +1,14 @@
 """
 Project configuration module.
 
-This module is responsible for defining the config to match the hardware.
+This module is responsible for defining the config to match the hardware_.
 
-The `Hardware config`_ section defines the various hardware configs based on
-the `Schematic`_, which are then encoded in the `HARDWARE_CFG` structure.
+The `hardware config`_ section defines the various hardware configs based on
+the `schematic`_, which are then encoded in the `HARDWARE_CFG` structure.
 
 The controller config elements in this structure can then be used to
 instantiate `BatteryController` instances which are the low level control and
 monitor interfaces to the hardware.
-
-ADC inputs per battery controller.
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-In order to monitor the charge current on the TP4056_ module, we monitor the
-voltage on the PROG pin as per the datasheet. The charge current at this point
-can then be calculated using the formula::
-
-          Vprog
-    Ich = ----- x 1200
-          Rprog
-
-where ``Rprog`` is the value of the current programming resistor on the board.
-
-For a 1000mA charge current a 1200Ω resistor should be used for ``Rprog``.
-Since these boards normally have a 1200Ω resistor installed, they are set to
-charge at 1000mA.
-From the formula above, the 1200 multiplier cancels the 1200Ω resistor
-divisor, leaving the charge current (``Ich``) equal to the voltage measured on
-the pin (``Vprog``).
-
-To use the ``PROG`` pin of the TP4056_ as charge monitor input for the
-`BatteryController`, we can effectively say the "current sensing" resistor is
-1Ω. This is however not 100% accurate and the resistor value can be calibrated
-at runtime. See `shunt_conf`.
-
-For the discharge monitor, the load resistor is also defined in `shunt_conf` and
-can be calibrated at runtime.
-
-Schematic
-~~~~~~~~~
-
-.. image:: img/BatCapMeter-schematic.svg
-   :width: 100%
-
-Hardware config
-~~~~~~~~~~~~~~~
-
-See above and `shunt_conf` for more info on the **resistor** values.
-
-.. Note: The table below is a bit tricky to render with pydoctor. To keep it
-   fairly compact some headers span columns, and are double line header. This
-   is supported with RST markup, but having empty cells is an error. Spaces do
-   not work, normal hyphens start bullet list, underscores does not work.
-   One option as used here is to use the Unicode point U+2010 which looks
-   like a hyphen and renders a hyphen. Even Unicode space type characters does
-   not seem to help.
-   BTW: This is RST comment, but will probably render as an HTML comment :-(
-
-====== ========= ================ ======= ==== ==== =========== ========== ========
- ‐        ‐             ‐         Control    ADC       ‐             Schematic
------- --------- ---------------- ------- --------- ----------- -------------------
-Ctrl   Function  Type               GPIO  Addr Chan Resistor    CTL Pin    ADC Chan
-====== ========= ================ ======= ==== ==== =========== ========== ========
-**B0** Bat V     `VoltageMonitor`    ‐    0x48  1   ‐           ‐          B0_O+B_V
-**B0** Charge    `ChargeMonitor`    16    0x48  2   `BC0_CH_R`  B0_CH_CTL  B0_CH_C
-**B0** Discharge `ChargeMonitor`    18    0x48  0   `BC0_DCH_R` B0_DCH_CTL B0_DCH_C
-**B1** Bat V     `VoltageMonitor`    ‐    0x49  3   ‐           ‐          B1_O+B_V
-**B1** Charge    `ChargeMonitor`    33    0x49  2   `BC1_CH_R`  B1_CH_CTL  B1_CH_C
-**B1** Discharge `ChargeMonitor`    35    0x48  3   `BC1_DCH_R` B1_DCH_CTL B1_DCH_C
-**B2** Bat V     `VoltageMonitor`    ‐    0x49  0   ‐           ‐          B2_O+B_V
-**B2** Charge    `ChargeMonitor`    37    0x4A  0   `BC2_CH_R`  B2_CH_CTL  B2_CH_C
-**B2** Discharge `ChargeMonitor`    39    0x49  1   `BC2_DCH_R` B2_DCH_CTL B2_DCH_C
-**B3** Bat V     `VoltageMonitor`    ‐    0x4A  2   ‐           ‐          B3_O+B_V
-**B3** Charge    `ChargeMonitor`    40    0x4A  3   `BC3_CH_R`  B3_CH_CTL  B3_CH_C
-**B3** Discharge `ChargeMonitor`    38    0x4A  1   `BC3_DCH_R` B3_DCH_CTL B3_DCH_C
-====== ========= ================ ======= ==== ==== =========== ========== ========
-
 
 Attributes:
     PIN_LED: Onboard LED pin. Default for S2 Mini
@@ -284,8 +216,10 @@ Attributes:
         D_RECOVER_TM
 
 .. _ADS1115: https://components101.com/modules/ads1115-module-with-programmable-gain-amplifier
-.. _TP4056: https://components101.com/modules/tp4056a-li-ion-battery-chargingdischarging-module
 .. _DW01: https://www.best-microcontroller-projects.com/support-files/dw01a.pdf
+.. _hardware: index.html#rst-hardware
+.. _hardware config: index.html#rst-hardware-config
+.. _schematic: index.html#rst-schematic
 """
 
 from i2c_config import const, i2c
