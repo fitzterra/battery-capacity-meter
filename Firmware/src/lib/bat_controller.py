@@ -497,7 +497,7 @@ class BatteryController(BCStateMachine):
                 self._bc_prefix,
             )
 
-    def _chargeSpike(self, jump: bool, v_from: bool, v_to: bool):
+    def _chargeSpike(self, jump: bool, c_from: bool, c_to: bool):
         """
         Callback for when a charge spike was detected.
 
@@ -506,18 +506,38 @@ class BatteryController(BCStateMachine):
 
         Args:
             jump: Will be True if this was a jump, False if it was a drop.
-            v_from: The value from which the jump occurred
-            v_to: The value to which the jump occurred.
+            c_from: The value from which the jump occurred
+            c_to: The value to which the jump occurred.
         """
         logger.info(
-            "%s: Charge spike detected: %s (%s -> %s)",
+            "%s: Charge spike detected: %s (%smA -> %smA)",
             self._bc_prefix,
             "jump" if jump else "drop",
-            v_from,
-            v_to,
+            c_from,
+            c_to,
         )
         # Did we reach the end of charge?
         if self._v_mon.voltage > C_VOLTAGE_TH:
+            # Some of the newer square Li-Ion batteries will start a new charge
+            # with a high current, but then almost immediately drop by a value
+            # larger that the spike threshold, while the battery voltage at
+            # that point is still above the C_VOLTAGE_TH.
+            # Unless we handle this, we immediately transition to a charged
+            # state. To deal with this, we will test the current charge
+            # current. If it is still above 1.5 x C_SPIKE_TH (hopefully giving
+            # enough room for another C_SPIKE_TH drop which we can then detect
+            # if needed), we will log the event, but not transition to charged.
+            if self._ch_mon.current > (C_SPIKE_TH * 1.5):
+                logger.info(
+                    "%s: Not transitioning to charged state since this seems "
+                    "to be a transient start-of-charge spike. Cycle time: %ss, "
+                    "Voltage: %sV",
+                    self._bc_prefix,
+                    self.soc_m.cycle_tm,
+                    self._v_mon.voltage,
+                )
+                return
+
             if not self.transition(self.E_ch_done):
                 logger.error(
                     "%s: Unable to transition to fully charged.",
@@ -536,7 +556,7 @@ class BatteryController(BCStateMachine):
                 self._bc_prefix,
             )
 
-    def _dischargeSpike(self, jump: bool, v_from: float, v_to: float):
+    def _dischargeSpike(self, jump: bool, c_from: float, c_to: float):
         """
         Callback for when a discharge spike was detected.
 
@@ -560,8 +580,8 @@ class BatteryController(BCStateMachine):
 
         Args:
             jump: Will be True if this was a jump, False if it was a drop.
-            v_from: The value from which the jump occurred
-            v_to: The value to which the jump occurred.
+            c_from: The value from which the jump occurred
+            c_to: The value to which the jump occurred.
 
         .. _DW01: https://www.best-microcontroller-projects.com/support-files/dw01a.pdf
         .. _TP4056: https://components101.com/modules/tp4056a-li-ion-battery-chargingdischarging-module
@@ -570,8 +590,8 @@ class BatteryController(BCStateMachine):
             "%s: Discharge spike detected: %s (%s -> %s, bat_v: %s)",
             self._bc_prefix,
             "jump" if jump else "drop",
-            v_from,
-            v_to,
+            c_from,
+            c_to,
             self._v_mon.voltage,
         )
 
