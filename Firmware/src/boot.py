@@ -49,49 +49,50 @@ def recordResetReason():
     last_reason = causes_map.get(machine.reset_cause(), "Unknown")
 
     # Hardcoded reset log file
-    log_f = "/reset_cause.log"
+    log_f = "reset_cause.log"
 
-    # Ensure file exists
-    if log_f not in os.listdir():
-        with open(log_f, "w", encoding="utf-8"):
-            pass
+    # Assume we do not have the log file yet
+    lines = []
+    # Preset the next line number to use
+    next_num = 1
+
+    # If the log file exists, open it and read the last max_entries
+    if log_f in os.listdir():
+        # print(f"## {log_f} exists....")
+        try:
+            with open(log_f, "r", encoding="utf-8") as l_file:
+                # Read all lines, strip newlines and split on tabs, keeping only
+                # the last max_entries
+                lines = [l.strip().split("\t") for l in l_file][-max_entries:]
+
+                # print(f"## Read from log file: {lines}")
+
+                # Try get the last number used from the last line we read in,
+                # increment it and assign to next_num
+                if lines:
+                    last_num = lines[-1][0]
+                    if last_num.isdigit():
+                        next_num = int(last_num) + 1
+
+                # print(f"## New next_num: {next_num}")
+        except Exception as exc:
+            print(f"Unable to open {log_f} for updating reset reason: {exc}")
+            return
+    # else:
+    # print(f"## {log_f} does not exist....")
+
+    # Append the new number and last reset reason we got above to lines
+    # as a 2-tuple
+    lines.append((str(next_num), last_reason))
+
+    # print(f"## Need to write to {log_f}: {lines}")
 
     try:
-        # Open for reading and writing
-        with open(log_f, "r+", encoding="utf-8") as l_file:
-            # Read all lines, strip newlines and split on tabs, keeping only
-            # the last max_entries
-            lines = [l.strip().split("\t") for l in l_file][-max_entries:]
-
-            # Preset the last number o None in case we can not determine it
-            # from the file
-            last_num = None
-
-            # Try get the last number used from the last line we read in
-            if lines:
-                last_num = lines[-1][0]
-                if last_num.isnumeric():
-                    last_num = int(last_num)
-
-            # If we did not get a last number, set it to 0
-            if last_num is None:
-                last_num = 0
-            # ... and then increment the last number
-            last_num += 1
-
-            # Append the new number and last reset reason we got above to lines
-            # as a 2-tuple
-            lines.append((str(last_num), last_reason))
-
-            # We are going to write the whole file again
-            l_file.seek(0)
-
+        # Open for writing
+        with open(log_f, "w", encoding="utf-8") as l_file:
             for line in lines:
                 # Use a tab as separator for each number and reason
                 l_file.write("\t".join(line) + "\n")
-            # Make sure we clear any extra crud if the new content is less than
-            # the old in the file
-            l_file.truncate()
     except Exception as exc:
         print(f"Error updating last reset reason log ({log_f}): {exc}")
 
