@@ -54,7 +54,7 @@ async def clientUp(client):
         logger.info("Network: Connection is up.")
 
         # Subscribe to any topics defined
-        await client.subscribe(net_conf.MQTT_CTL_TOPIC, 0)
+        await client.subscribe(f"{net_conf.MQTT_CTL_TOPIC}/#", 0)
 
         # Sync network time
         try:
@@ -82,12 +82,46 @@ async def clientDown(client):
         )
 
 
+async def returnResetLog(client):
+    """
+    Called to publish the current reset cause log (see `boot.recordResetReason`
+    for more details) via MQTT.
+
+    The reset cause log is updated with the cause for the last reset every time
+    the controller boots. This can help us understand why the last reset
+    happened, especially if that was due to a code freeze and the reset was by
+    the `watchdog` timer.
+
+    This function will be called from the `messages` callback when a
+    ``get_reset_log`` message was received on the `MQTT_CTL_TOPIC` topic.
+
+    We will read the log, which will only contain the last few entries, and
+    then publish the full log file data on the `MQTT_LOG_TOPIC` ``/reset_log``
+    topic
+    """
+    log_f = "reset_cause.log"
+
+    with open(log_f, "r", encoding="utf-8") as f:
+        topic = f"{net_conf.MQTT_LOG_TOPIC}/reset_log"
+        await client.publish(topic, f.read(), qos=0)
+
+
 async def messages(client):
     """
     Manage control messages received via MQTT.
+
+    Any messages published on the `MQTT_CTL_TOPIC` will be handled here.
+
+    Currently only allow message is ``get_reset_log`` which is handled by
+    `returnResetLog`
     """
     async for topic, msg, retained in client.queue:
         logger.info("MQTT CTL: %s, %s, %s", topic.decode(), msg.decode(), retained)
+
+        # Is this a request for publishing the current reset cause log (see
+        # `boot.recordResetReason`?
+        if msg.decode() == "get_reset_log":
+            await returnResetLog(client)
 
 
 def buildMsg(bc: BatteryController) -> dict:
