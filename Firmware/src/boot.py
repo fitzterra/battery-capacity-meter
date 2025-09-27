@@ -19,6 +19,8 @@ def recordResetReason():
     was, but we keep a count of reboots. So, after the 25th reboot, the file
     may look like this (only showing the last 8 entries):
 
+    ::
+
         18    Soft reset
         19    Soft reset
         20    Hard reset
@@ -28,8 +30,9 @@ def recordResetReason():
         24    Soft reset
         25    Soft reset
 
-    This file can be retrieved via MQTT (see `telemetry.messages`) and can give
-    some idea of reboot reasons. The count and reason are tab separated.
+    This file can be retrieved via MQTT (see `telemetry.returnResetLog`) and
+    can give some idea of reboot reasons. The count and reason are tab
+    separated.
     """
 
     # Map of reset flags to strings
