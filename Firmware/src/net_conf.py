@@ -27,7 +27,8 @@ Attributes:
     MQTT_PUB_TOPIC: This is the base topic used to publish state messages on.
         ``BatteryController.name`` will be appended to the topic to make unique
         topics per battery controller name.
-    MQTT_CTL_TOPIC: This is the topic to subscribe to for MQTT control messages.
+    MQTT_CTL_TOPIC: This is the topic to subscribe to for MQTT control
+        messages. We will subscribe for all sub topic of this topic (#).
     MQTT_DEBUG: If True, the `mqtt_as` module will print verbose output that
         can be used for debugging.
 """
@@ -41,7 +42,7 @@ MQTT_HOST: str = ""
 MQTT_PORT: int = 1883
 MQTT_PUB_TOPIC: str = "BCM/state"
 MQTT_LOG_TOPIC: str = "BCM/log"
-MQTT_CTL_TOPIC: str = "BCM/ctl/#"
+MQTT_CTL_TOPIC: str = "BCM/ctl"
 MQTT_DEBUG: bool = False
 
 # Override any site local values
