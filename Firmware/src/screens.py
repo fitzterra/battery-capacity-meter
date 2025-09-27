@@ -235,7 +235,7 @@ class FootMenu:
         shown in the last screen row, and the option will be highlighted by
         adding a top and bottom line to the option.
         """
-        # We will be doing a lot access to protected members in this method, so
+        # We will be doing a lot of access to protected members in this method, so
         # @pylint: disable=protected-access
 
         scr = self._screen

@@ -5,6 +5,7 @@ Main entry point for for `BatteryController`.
 
 import sys
 import uasyncio as asyncio
+from machine import WDT
 from config import HARDWARE_CFG
 from lib.bat_controller import BatteryController
 from lib.utils import stdinKeyMonitor
@@ -238,6 +239,32 @@ class BCSerialUI:
             )
 
 
+async def watchdog():
+    """
+    A watchdog process that sets up a hardware watchdog and then keeps feeding
+    it to avoid it resetting the system.
+
+    This is in case the code freezes leaving us in a charging or discharging
+    state.
+
+    To get an idea if a system reset was caused by the WDT, you can request the
+    reset log - see `telemetry.returnResetLog`
+    """
+    # How long we allow before the timer times out and resets without feeding
+    # the dig. This is in milliseconds
+    wdt_timeout = 3000
+
+    # Create the watchdog timer
+    wdt = WDT(timeout=wdt_timeout)
+
+    # Now we run forever
+    while True:
+        # We sleep for 500 millis less that the timer timeout value...
+        await asyncio.sleep_ms(wdt_timeout - 500)
+        # ... and then we feed the dog
+        wdt.feed()
+
+
 def main():
     """
     Main entry
@@ -256,6 +283,7 @@ def main():
 
     loop = asyncio.get_event_loop()
     loop.set_exception_handler(asyncIOExeption)
+    loop.create_task(watchdog())
     loop.create_task(broadcast(bat_ctls))
     loop.run_forever()
 
