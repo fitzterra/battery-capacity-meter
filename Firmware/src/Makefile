@@ -174,6 +174,7 @@ flash-bin: $(MP_BIN_PATH)
 # firmware, this is where to add it.
 MPY_SRC = boot.py \
 		  main.py \
+		  watchdog.py \
 		  sitelocal_conf.py \
 		  net_conf.py \
 		  i2c_config.py \
@@ -268,9 +269,17 @@ runtime-cfg-backup:
 		fi \
 	 )
 
+# Allows bypassing the watchdog timer by creating the bypass file as bypass
+# flag, and then resetting the MCU. See the watchdog.py module for more.
+bypass-wdt:
+	$(MPR) touch :bypass_wdt
+	sleep 4
+	$(MPR) soft-reset
+
 # This rsyncs the $(FW_DIR) to the /pyboard/ dir and then resotes any runtime
-# configs
-upload: build runtime-cfg-backup
+# configs - we also need to bypass the watchdog timer nowadyas or the upload
+# may fail.
+upload: bypass-wdt build runtime-cfg-backup
 	$(RS) rsync -m $(FW_DIR) /pyboard
 	@echo "Restoring runtime configs..."
 	$(MPR) cp $(RT_BACKUP_DIR)/* :
@@ -293,7 +302,8 @@ repl:
 
 reset:
 	@# Do a soft reset by sending a CTRL-D via rshell running the REPL
-	$(RS) repl '~  ~'
+	@#$(RS) repl '~  ~'
+	@$(MPR) soft-reset
 
 ## Creates an MR for the current branch if not on the UAT or main branches
 mr:
