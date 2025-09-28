@@ -358,6 +358,10 @@ LOGGING_CFG = {
         "log": True,
         "telem": False,
     },
+    "watchdog": {
+        "log": True,
+        "telem": True,
+    },
     "screens": {
         "log": True,
         "telem": False,
