@@ -1869,7 +1869,10 @@ def uiSetup(bcms: list):
       ``bcms`` list.
     * The main `Menu` which consists of:
         * The `BCMView` entry
-        * A ``Config`` option for future config and setup from the UI
+        * A Config sub `Menu` consisting of:
+            * `Calibration` options
+            * The `NET_CONF` submenu for network config
+            * The `RUNTIME_CONF` submenu for general runtime config
         * An entry for the `MemoryUsage` screen
     * The `Boot` Screen.
 
