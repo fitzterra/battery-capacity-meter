@@ -1,0 +1,17 @@
+# General config for the MCU, devboard, version of MicroPython, etc.
+
+### DEV Board
+DBOARD_MANUFACTURER=Wemos
+DBOARD_MODEL=S2 Mini
+DBOARD_SITE=https://www.wemos.cc/en/latest/s2/s2_mini.html
+DBOARD_FLASH_MODE=Press and release both buttons
+
+### MCU info
+MCU_MANUFACTURER=Espressif
+MCU_MODEL=ESP32-S2FN4R2
+MCU_DATASHEET=https://www.espressif.com/sites/default/files/documentation/esp32-s2_datasheet_en.pdf
+
+## MicroPython info
+MP_DOWNLOAD_SITE=https://micropython.org/download/LOLIN_S2_MINI/
+MP_BIN=LOLIN_S2_MINI-20240602-v1.23.0.bin
+MP_BIN_URL=https://micropython.org/resources/firmware/${MP_BIN}
