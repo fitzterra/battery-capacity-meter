@@ -4,6 +4,7 @@ Demo UI Screen
 
 import random
 from micropython import const
+from machine import Pin
 from ssd1306 import SSD1306_I2C
 import uasyncio as asyncio
 from lib import ulogging as logging
@@ -11,7 +12,6 @@ from ui.ui_output import Screen
 from ui.ui_input import setupEncoder, input_evt
 
 from config import (
-    Pin,
     i2c,
     ENC_CLK,
     ENC_DT,
