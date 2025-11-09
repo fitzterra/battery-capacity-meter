@@ -377,6 +377,10 @@ SOC_NUM_CYCLES = 2
 # calibrating the shunt.
 CALIB_STEP = 0.05
 
+#### Watchdog module config ######
+# If we should log memory usage stats or not.
+WD_LOG_MEM = True
+
 ##### Logging config #####
 LOGGING_CFG = {
     "__main__": {
