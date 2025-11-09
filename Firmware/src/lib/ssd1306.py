@@ -1,1 +1,1 @@
-../../submodules/ssd1306_mp/ssd1306.py
+../../submodules/micropython-ui/src/lib/ssd1306.py

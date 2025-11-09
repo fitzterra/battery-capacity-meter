@@ -56,6 +56,7 @@ from ui import (
     input_evt,
     Menu,
     FieldEdit,
+    Toggle,
 )
 from config import (
     i2c,
@@ -958,7 +959,7 @@ def updateConfig(
     conf_name, screen, conf_mod, const_name=None, f_type="num", reboot=False, *args
 ):
     """
-    Function that will be called from he `NET_CONF` and `RUNTIME_CONF` menu
+    Function that will be called from the `NET_CONF` and `RUNTIME_CONF` menu
     entries to set some local config value.
 
     When called, we will use the ``conf_mod`` name as the config module in
@@ -1079,15 +1080,64 @@ def updateConfig(
         # Now save it as a site local
         updateLocal(conf_name, rt_conf)
 
-    # Create a new FieldEdit screen to update the setting
-    conf_editor = FieldEdit(
-        conf_name,
-        screen.px_w,
-        screen.px_h,
-        val=getattr(rt_conf, conf_name),
-        f_type=f_type,
-        setter=setConfigVal,
-    )
+    def setBooleanVal(val: bool, _):
+        """
+        Saves the new value.
+
+        Args:
+            val: The updated value. This is a ``bytearray``, and for now we
+                expect all values to be integers, so we need to convert it to int.
+            _: This is the ignored field ID from the menu.
+        """
+        logger.info(
+            "updateConfig: Setting site local boolean config: %s.%s=%s",
+            conf_mod,
+            conf_name,
+            val,
+        )
+
+        # Update in the module - NOTE this does not update any directly
+        # imported attributes!
+        setattr(rt_conf, conf_name, val)
+
+        # Now save it as a site local
+        updateLocal(conf_name, rt_conf)
+
+        # TODO: This is a bad hack.... find a more general way to manage this.
+        # Now some weird shit....
+        # For the WD_LOG_MEM option, we need to update the imported value
+        # because we do not want to reboot if we are middle of a
+        # measurement.... so, so now import from there and then update directly
+        # ... crazy....
+        if conf_name == "WD_LOG_MEM":
+            logger.info("Doing a direct update for WD logger...")
+            import watchdog
+
+            watchdog.WD_LOG_MEM = val
+
+    # Get the value from the config
+    val = getattr(rt_conf, conf_name)
+
+    if isinstance(val, bool):
+        conf_editor = Toggle(
+            conf_name,
+            screen.px_w,
+            screen.px_h,
+            val=val,
+            t_type=f_type,
+            setter=setBooleanVal,
+        )
+    else:
+        # Create a new FieldEdit screen to update the setting
+        conf_editor = FieldEdit(
+            conf_name,
+            screen.px_w,
+            screen.px_h,
+            val=val,
+            f_type=f_type,
+            setter=setConfigVal,
+        )
+
     # Pass focus to the field editor
     # pylint: disable=protected-access
     screen._passFocus(conf_editor, return_to_me=True)
@@ -1114,6 +1164,7 @@ RUNTIME_CONF = (
     ("TELEMETRY_EMIT_FREQ", updateConfig, "config"),
     ("SOC_REST_TIME", updateConfig, "config"),
     ("SOC_NUM_CYCLES", updateConfig, "config"),
+    ("Log mem info", updateConfig, "config", "WD_LOG_MEM", "b"),
     ("Back", None),
 )
 
@@ -1869,7 +1920,10 @@ def uiSetup(bcms: list):
       ``bcms`` list.
     * The main `Menu` which consists of:
         * The `BCMView` entry
-        * A ``Config`` option for future config and setup from the UI
+        * A Config sub `Menu` consisting of:
+            * `Calibration` options
+            * The `NET_CONF` submenu for network config
+            * The `RUNTIME_CONF` submenu for general runtime config
         * An entry for the `MemoryUsage` screen
     * The `Boot` Screen.
 
