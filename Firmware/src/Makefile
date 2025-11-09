@@ -182,11 +182,7 @@ MPY_SRC = boot.py \
 		  shunt_conf.py \
 		  structures.py \
 		  telemetry.py \
-		  ui/__init__.py \
-		  ui/ui_input.py \
-		  ui/ui_output.py \
-		  ui/ui_menu.py \
-		  ui/ui_field_edit.py \
+		  ui/*.py \
 		  lib/ulogging.py \
 		  lib/led.py \
 		  lib/ssd1306.py \
