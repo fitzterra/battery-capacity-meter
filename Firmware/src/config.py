@@ -10,6 +10,14 @@ The controller config elements in this structure can then be used to
 instantiate `BatteryController` instances which are the low level control and
 monitor interfaces to the hardware.
 
+Besides the hardware_ config, there are also other runtime config values. All
+configs are usually static and baked into the firmware, but the
+`sitelocal_conf` module provides functionality to override these config values
+and maintain the updated configs across restarts in the running system.
+
+The `RUNTIME_CONF` in the `screens` module provides a UI config screen where
+many of these values can be overridden, for example.
+
 Attributes:
     PIN_LED: Onboard LED pin. Default for S2 Mini
 
@@ -203,6 +211,11 @@ Attributes:
         voltage is below this threshold, then we generate fully discharged
         event.
 
+    D_V_RECOVER_TH: The voltage the battery needs to return to after discharge
+        before we deem it recovered from discharge.
+    
+        The DW01 has this set to between 2.9V and 3.1V as a guide.
+
     D_RECOVER_MAX_TM: The max time we will allow for recovery after a discharge.
 
         If the recovery conditions are not met in this period, we will assume
@@ -214,6 +227,18 @@ Attributes:
     D_RECOVER_MIN_TM: Since we do not have battery temperature measurement
         currently, we will use a min rest time instead. This must be less than
         D_RECOVER_TM
+
+    TELEMETRY_EMIT_FREQ: For continues telemetry emission states like charging
+        and discharging, this is the frequency (in milliseconds) with which to
+        emit telemetry updates.
+
+    SOC_REST_TIME: The amount of time to rest after a charge or discharge
+        complete to allow the battery and/or load temperatures to stabilize.
+
+    SOC_NUM_CYCLES: The number of cycles to run for a SoC measurement
+
+    CALIB_STEP: The step value to increase or decrease a shunt resistor value
+       by when calibrating the shunt, via the `Calibration` UI screen.
 
 .. _ADS1115: https://components101.com/modules/ads1115-module-with-programmable-gain-amplifier
 .. _DW01: https://www.best-microcontroller-projects.com/support-files/dw01a.pdf
@@ -351,6 +376,10 @@ SOC_NUM_CYCLES = 2
 # The step value to increase or decrease a shunt resistor value by when
 # calibrating the shunt.
 CALIB_STEP = 0.05
+
+#### Watchdog module config ######
+# If we should log memory usage stats or not.
+WD_LOG_MEM = True
 
 ##### Logging config #####
 LOGGING_CFG = {

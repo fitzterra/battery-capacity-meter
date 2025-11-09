@@ -37,6 +37,7 @@ import uasyncio as asyncio
 import utime as time
 from machine import WDT
 from lib.ulogging import getLogger
+from config import WD_LOG_MEM
 
 logger = getLogger(__name__)
 
@@ -96,7 +97,7 @@ async def watchdog():
         wdt.feed()
 
         # Log mem stats?
-        if time.ticks_diff(next_mem_log, time.ticks_ms()) <= 0:
+        if WD_LOG_MEM and time.ticks_diff(next_mem_log, time.ticks_ms()) <= 0:
             logger.info("Memory (alloc/free): %s / %s", gc.mem_alloc(), gc.mem_free())
             # The next time we need to log mem stats - we need to convert ML_PERIOD to
             # millis here.
