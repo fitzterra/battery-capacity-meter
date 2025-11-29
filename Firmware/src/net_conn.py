@@ -9,7 +9,7 @@ Note:
     This means that this module will not be used in production, but is still
     kept in the code base if simple networking testing or such may be needed.
 
-The network access credentials are defined in thew `net_conf` module, and it's
+The network access credentials are defined in the `net_conf` module, and it's
 site local settings.
 
 This module also provides the `syncTime()` function to set the local date/time
@@ -60,27 +60,37 @@ def connect():
     The network config is set by `net_conf.SSID` and `net_conf.PASS` if `CONNECT` is ``True``. If
     `CONNECT` is ``False``, no connection will be attempted.
 
-    This function only connects to the network, and it would be a good
+    If `net_conf.HOSTNAME` is set, it will be set as the client hostname.
+
+    Returns:
+        True if the connection is successful, False otherwise.
     """
+    log_name = "NetConn"
+
     if not CONNECT:
-        logger.info("NetConn: Not connecting to network because CONNECT is False.")
-        return
+        logger.info("%s: Not connecting to network because CONNECT is False.", log_name)
+        return False
 
     # Create a station interface and activate it
     wlan = network.WLAN(network.STA_IF)
     wlan.active(True)
 
     if wlan.isconnected():
-        logger.info("NetConn: Already connected: %s", wlan.ifconfig())
-        return
+        logger.info("%s: Already connected: %s", log_name, wlan.ifconfig())
+        return True
 
     # Set the hostname if available
     if net_conf.HOSTNAME:
-        logger.info("NetConn: Setting hostname to: %s", net_conf.HOSTNAME)
+        logger.info("%s: Setting hostname to: %s", log_name, net_conf.HOSTNAME)
         wlan.config(hostname=net_conf.HOSTNAME)
 
-    logger.info("NetCon: Connecting to network...")
-    wlan.connect(net_conf.SSID, net_conf.PASS)
+    logger.info("%s: Connecting to network...", log_name)
+    try:
+        wlan.connect(net_conf.SSID, net_conf.PASS)
+        return True
+    except OSError as exc:
+        logger.error("%s: Error setting up connection: %s", log_name, exc)
+        return False
 
 
 def disconnect():
