@@ -1,13 +1,20 @@
 """
 Module to connect and handle and monitor a network connection.
 
-The network access credentials are defined in the `net_conf` module, and it's
-site local settings.
+Using this module entails:
+
+* Making sure the network parameters are set in `net_conf` (see `connect`
+  for more details)
+* Starting the `connectAndMonitor()` coro in an asyncio loop which will
+  establish the network connection via `connect()`, sync the time via
+  `syncTime()` and will also manage the `IS_CONNECTED` global.
 
 This module also provides the `syncTime()` function to set the local date/time
 via NTP_
 
 Attributes:
+    logger: Local module logger instance.
+
     CONNECT: Connection control. If ``False``, a `connect()` will not try to
         establish a connection.
 
@@ -189,16 +196,20 @@ async def connectAndMonitor():
     This is an async task that will `connect` to the network, and then monitor
     the connection.
 
-    Note:
+    Warning:
         It seems that when the connection is lost (tested by switching off the
-        WiFi router), the internal network stack will automatically
-        continuously try to re-establish the connection. So, if this detected,
-        all we do is go into a loop and wait for the IP address to appear on
-        the interface again, instead of disconnecting and then trying a fresh
-        connection again.
-        This functionality could be built into Micropython or at the lower
-        ESP32 level, so may work the same on other platforms, where some
-        tweaking of this flow may be needed.
+        WiFi router), the internal network stack will automatically and
+        continuously try to re-establish the connection.
+
+        So, if a connection loss is detected all we do is go into a loop and
+        wait for the IP address to appear on the interface again. This is done
+        instead of disconnecting and then trying a fresh connection again,
+        which might be required on other platform where the connection is not
+        retried by the lower levels.
+
+        This functionality seems to be built into Micropython or at the lower
+        ESP32 level, so may not work the same on other platforms. For these
+        cases some tweaking of this flow may be needed.
 
     This task will keep `IS_CONNECTED` set to indicate the network connection
     status, and will never return.
