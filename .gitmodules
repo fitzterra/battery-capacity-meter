@@ -19,3 +19,7 @@
 [submodule "Firmware/submodules/micropython-ads1x15"]
 	path = Firmware/submodules/micropython-ads1x15
 	url = git@gitlab.gaul.za:tomc/micropython-ads1x15.git
+[submodule "Firmware/submodules/aiomqttc"]
+	path = Firmware/submodules/aiomqttc
+	url = git@gitlab.gaul.za:gaulnet/aiomqttc.git
+	branch = my_fork
