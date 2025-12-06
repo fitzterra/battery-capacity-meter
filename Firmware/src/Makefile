@@ -193,7 +193,7 @@ MPY_SRC = boot.py \
 		  lib/adc_monitor.py \
 		  lib/statemachines.py \
 		  lib/bat_controller.py \
-		  lib/mqtt_as.py \
+		  lib/aiomqttc.py \
 		  lib/uuid.py \
 		  screens.py \
 		  version.py \
