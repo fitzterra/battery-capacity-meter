@@ -1,13 +1,5 @@
 """
-Module to connect and handle network connections if not using the `Asynchronous
-MQTT`_ module.
-
-Note:
-    The `telemetry` module uses `Asynchronous MQTT`_ for broadcasting
-    battery status and will thus use the `mqtt_as` module for both handling the
-    network connection as well as the MQTT connection.
-    This means that this module will not be used in production, but is still
-    kept in the code base if simple networking testing or such may be needed.
+Module to connect and handle and monitor a network connection.
 
 The network access credentials are defined in the `net_conf` module, and it's
 site local settings.
@@ -17,50 +9,68 @@ via NTP_
 
 Attributes:
     CONNECT: Connection control. If ``False``, a `connect()` will not try to
-    LED_PIN: A pin connected to an LED to toggle to indicate the network status.
-        If the LED is reverse connected (anode to VCC and pin to LED cathode,
-        meaning 0 on the pin switched the LED on), indicate this by making the
+        establish a connection.
+
+        This is set from `net_conf.CONNECT` if `CONNECT` is defined in
+        `net_conf`, else it defaults to False.
+
+    LED_PIN: A pin connected to an `LED` to toggle to indicate the network status.
+
+        If the `LED` is reverse connected (anode to VCC and pin to `LED` cathode,
+        meaning 0 on the pin switched the `LED` on), indicate this by making the
         pin a negative value. Otherwise, to switch the LED on, the pin will be
-        taken high (expecting the LED cathode to be connected to GND).
+        taken high (expecting the `LED` cathode to be connected to GND).
+
     IS_CONNECTED: Will be set to True/False depending on the current connection
-        status if the `monitor()` task is started.
+        status if the `connectAndMonitor()` task is started.
+
     TIME_SYNCED: Will be ``False`` initially, and is updated by calling
         `syncTime()`. Will be ``True`` if the time was synced via NTP_.
 
-.. _Asynchronous MQTT: https://github.com/peterhinch/micropython-mqtt
 .. _NTP: https://en.wikipedia.org/wiki/Network_Time_Protocol
 """
 
 import ntptime
 import uasyncio as asyncio
 import network
-from micropython import const
 from lib.ulogging import getLogger
 from lib.led import LED
 import net_conf
 
 logger = getLogger(__name__)
 
-# Warning: not very Pythonic :-(
-# We predefine the expected values from the connection.py settings file here
-# with default values, and override them by doing a wildcard import from
-# connection. Only those values defined will overwrite our local defaults.
-CONNECT: bool = False
+# Global connection switch from net_conf
+CONNECT: bool = getattr(net_conf, "CONNECT", False)
+
 # This is the default LED pin for an S2 Mini.
-LED_PIN: int = const(15)
+LED_PIN: int | None = getattr(net_conf, "CONN_LED_PIN", None)
 
 IS_CONNECTED: bool = False
 TIME_SYNCED: bool = False
 
 
-def connect():
+async def connect():
     """
-    Connect to network.
+    Sets up the network connection and then tries to connect.
 
-    The network config is set by `net_conf.SSID` and `net_conf.PASS` if `CONNECT` is ``True``. If
-    `CONNECT` is ``False``, no connection will be attempted.
+    Note:
+        This is an *async* function so must be awaited to allow for the
+        connection to be established without blocking.
 
-    If `net_conf.HOSTNAME` is set, it will be set as the client hostname.
+    The network config is defined in `net_conf`, and the following settings
+    from there are relevant here:
+
+    * `net_conf.SSID` : The WiFi SSID to connect to.
+    * `net_conf.PASS` : Password for the connection.
+    * `net_conf.HOSTNAME` : If set, it will be set as the client hostname.
+    * `net_conf.CONNECT` : Connection control. The local `CONNECT` is set from
+      this value if it is present in `net_conf`, defaulting ``FALSE`` if not.
+      If `CONNECT` resolves to ``False``, no connection will be attempted.
+
+    After setting up the connection this function will wait for specific period
+    of time for the connection to be established. If the connection does not
+    come up in this time, or if any connection error occurs, ``False`` is
+    returned.
 
     Returns:
         True if the connection is successful, False otherwise.
@@ -84,18 +94,32 @@ def connect():
         logger.info("%s: Setting hostname to: %s", log_name, net_conf.HOSTNAME)
         wlan.config(hostname=net_conf.HOSTNAME)
 
+    tout_cnt = 16
     logger.info("%s: Connecting to network...", log_name)
     try:
         wlan.connect(net_conf.SSID, net_conf.PASS)
-        return True
+        while tout_cnt:
+            if wlan.isconnected():
+                return True
+            tout_cnt -= 1
+            logger.warning("Waiting for connection to come up (%s)...", tout_cnt)
+            await asyncio.sleep(1)
+        logger.error("Timed out waiting for network to come up.")
+        return False
     except OSError as exc:
         logger.error("%s: Error setting up connection: %s", log_name, exc)
-        return False
+    except Exception as exc:
+        logger.error("%s: Unhandled error setting up connection: %s", log_name, exc)
+
+    return False
 
 
 def disconnect():
     """
     Disconnects from the network if is is connected.
+
+    Side effect:
+        Sets `IS_CONNECTED` to False
     """
     # pylint: disable=global-statement
 
@@ -111,9 +135,11 @@ def disconnect():
 
     if not wlan.isconnected():
         logger.info("  Not currently connected.")
+        wlan.active(False)
         return
 
     wlan.disconnect()
+    wlan.active(False)
     logger.info("   Disconnected.")
 
 
@@ -158,33 +184,24 @@ def syncTime():
         logger.error("  Error setting time: %s", exc)
 
 
-async def monitor():
+async def connectAndMonitor():
     """
-    This is an async task that will monitor the network connection.
+    This is an async task that will `connect` to the network, and then monitor
+    the connection.
 
-    Currently it monitors the WLAN connection and then it detects the
-    connection has dropped, it will update `IS_CONNECTED` to ``False`` and
-    switch off the monitor LED.
+    Note:
+        It seems that when the connection is lost (tested by switching off the
+        WiFi router), the internal network stack will automatically
+        continuously try to re-establish the connection. So, if this detected,
+        all we do is go into a loop and wait for the IP address to appear on
+        the interface again, instead of disconnecting and then trying a fresh
+        connection again.
+        This functionality could be built into Micropython or at the lower
+        ESP32 level, so may work the same on other platforms, where some
+        tweaking of this flow may be needed.
 
-    When a connection is established, it will again update `IS_CONNECTED` to
-    ``True``, call `syncTime()` and turn the monitor LED on.
-
-    The idea was that this will try to re-establish the connection, but I ran
-    into some issues getting this to work - read on...
-
-    The way I tested was to kick the connection on the router, but I suspect
-    this does a deauth, and may not be representative of a real connection
-    loss.
-
-    On the ESP32 I tested, this puts the WLAN in some state where you can not
-    reconnect - or at least not with everything I tried like forcing a
-    disconnect, deactivating/reactivating the interface, etc. It seems the
-    ESP32 when in this state will wait around 60 seconds and then reconnect
-    automatically.
-
-    Other issues where the AP goes away, or the signal is not good may result
-    in different states of the ESP32 WLAN interface, but that is too much of an
-    effort to test at the moment.
+    This task will keep `IS_CONNECTED` set to indicate the network connection
+    status, and will never return.
     """
     # pylint: disable=global-statement
 
@@ -195,7 +212,20 @@ async def monitor():
         return
 
     mon_led = LED(LED_PIN)
-    mon_led.off()
+    mon_led.flash()
+
+    while not await connect():
+        logger.info("NetMon: Trying a disconnect, sleep a bit and then reconnecting...")
+        try:
+            disconnect()
+        except Exception as exc:
+            logger.error("NetMon: Disconnect error: %s", exc)
+
+        await asyncio.sleep(3)
+
+    IS_CONNECTED = True
+    mon_led.on()
+    syncTime()
 
     # Create a local dict of the various STAT_ constants from network in order
     # to report the status names.
@@ -207,11 +237,13 @@ async def monitor():
         status = wlan.status()
         if status != network.STAT_GOT_IP:
             logger.info(
-                "NetMon: Not connected. Status: %s", stat_names.get(status, status)
+                "NetMon: Not connected. Status: %s. IS_CONNECTED=%s",
+                stat_names.get(status, status),
+                IS_CONNECTED,
             )
             if IS_CONNECTED:
                 IS_CONNECTED = False
-                mon_led.off()
+                mon_led.flash()
         else:
             if not IS_CONNECTED:
                 IS_CONNECTED = True
@@ -220,24 +252,3 @@ async def monitor():
                 mon_led.on()
 
         await asyncio.sleep_ms(1000)
-
-
-def _test():
-    """
-    Function for testing `connect()`.
-
-    Just import it and execute it.
-
-    It will try to connect and then start the monitor to log network status.
-    """
-
-    connect()
-
-    async def runEm():
-        """
-        Nike
-        """
-        await asyncio.gather(monitor())
-
-    logger.info("Starting tasks...")
-    asyncio.run(runEm())
