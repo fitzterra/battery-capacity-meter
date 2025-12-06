@@ -395,6 +395,11 @@ LOGGING_CFG = {
         "log": True,
         "telem": False,
     },
+    "telemetry": {
+        "log": True,
+        # If True, it causes recursive telemetry logging. Keep it False
+        "telem": False,
+    },
 }
 
 # Override any site local values

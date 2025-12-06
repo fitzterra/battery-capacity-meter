@@ -181,6 +181,8 @@ MPY_SRC = boot.py \
 		  config.py \
 		  shunt_conf.py \
 		  structures.py \
+		  net_conn.py \
+		  net_local_conf.py \
 		  telemetry.py \
 		  ui/*.py \
 		  lib/ulogging.py \
@@ -197,6 +199,7 @@ MPY_SRC = boot.py \
 		  lib/uuid.py \
 		  screens.py \
 		  version.py \
+
 
 # The expected .mpy files for each .py above
 MPYS = $(patsubst %.py,%.mpy,$(wildcard $(MPY_SRC)))
