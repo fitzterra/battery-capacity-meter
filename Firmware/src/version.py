@@ -2,4 +2,4 @@
 Project version info
 """
 NAME = "BatCapMeter"
-VERSION = "0.15.0"
+VERSION = "0.16.0_rc1"
