@@ -240,6 +240,9 @@ Attributes:
     CALIB_STEP: The step value to increase or decrease a shunt resistor value
        by when calibrating the shunt, via the `Calibration` UI screen.
 
+    SCRN_OFF_TM: The time in seconds without any user input when the screen
+        saver will be activated. Can also be set from the UI config menu.
+
 .. _ADS1115: https://components101.com/modules/ads1115-module-with-programmable-gain-amplifier
 .. _DW01: https://www.best-microcontroller-projects.com/support-files/dw01a.pdf
 .. _hardware: index.html#rst-hardware
