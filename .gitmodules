@@ -1,6 +1,3 @@
-[submodule "Firmware/submodules/micropython-ads1x15"]
-	path = Firmware/submodules/micropython-ads1x15
-	url = git@gitlab.gaul.za:tomc/micropython-ads1x15.git
 [submodule "Firmware/submodules/ssd1306_mp"]
 	path = Firmware/submodules/ssd1306_mp
 	url = https://github.com/Kongduino/ssd1306_mp.git
@@ -16,9 +13,13 @@
 [submodule "Firmware/submodules/micropython-stubs"]
 	path = Firmware/submodules/micropython-stubs
 	url = https://github.com/Josverl/micropython-stubs.git
-[submodule "Firmware/submodules/micropython-mqtt"]
-	path = Firmware/submodules/micropython-mqtt
-	url = https://github.com/peterhinch/micropython-mqtt.git
 [submodule "Firmware/submodules/micropython-ui"]
 	path = Firmware/submodules/micropython-ui
 	url = git@gitlab.gaul.za:gaulnet/micropython-ui.git
+[submodule "Firmware/submodules/micropython-ads1x15"]
+	path = Firmware/submodules/micropython-ads1x15
+	url = git@gitlab.gaul.za:tomc/micropython-ads1x15.git
+[submodule "Firmware/submodules/aiomqttc"]
+	path = Firmware/submodules/aiomqttc
+	url = git@gitlab.gaul.za:gaulnet/aiomqttc.git
+	branch = my_fork

@@ -240,6 +240,9 @@ Attributes:
     CALIB_STEP: The step value to increase or decrease a shunt resistor value
        by when calibrating the shunt, via the `Calibration` UI screen.
 
+    SCRN_OFF_TM: The time in seconds without any user input when the screen
+        saver will be activated. Can also be set from the UI config menu.
+
 .. _ADS1115: https://components101.com/modules/ads1115-module-with-programmable-gain-amplifier
 .. _DW01: https://www.best-microcontroller-projects.com/support-files/dw01a.pdf
 .. _hardware: index.html#rst-hardware
@@ -377,6 +380,11 @@ SOC_NUM_CYCLES = 2
 # calibrating the shunt.
 CALIB_STEP = 0.05
 
+#### UI Config #####
+# How long to wait before switching the display off to save the screen. In
+# seconds.
+SCRN_OFF_TM = 30
+
 #### Watchdog module config ######
 # If we should log memory usage stats or not.
 WD_LOG_MEM = True
@@ -393,6 +401,11 @@ LOGGING_CFG = {
     },
     "screens": {
         "log": True,
+        "telem": False,
+    },
+    "telemetry": {
+        "log": True,
+        # If True, it causes recursive telemetry logging. Keep it False
         "telem": False,
     },
 }
