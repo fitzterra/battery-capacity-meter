@@ -67,6 +67,7 @@ from config import (
     OLED_W,
     OLED_H,
     CALIB_STEP,
+    SCRN_OFF_TM,
 )
 import config
 import net_conf
@@ -347,7 +348,7 @@ class Boot(Screen):
             name, px_w, px_h: See `Screen.__init__`
             bcms: The number of BCMs available.
         """
-        super().__init__(name, px_w, px_h, logger=logger)
+        super().__init__(name, px_w, px_h, logger=logger, off_tm=SCRN_OFF_TM * 1000)
         self.num_bcms = bcms
 
     def _drawLogo(self, x: int, y: int, rad: int = 12, show: bool = False):
@@ -412,7 +413,7 @@ class MemoryUsage(Screen):
         """
         Overrides init to set our local logger.
         """
-        super().__init__(name, px_w, px_h, logger=logger)
+        super().__init__(name, px_w, px_h, logger=logger, off_tm=SCRN_OFF_TM * 1000)
 
     def setup(self):
         """
@@ -534,7 +535,7 @@ class Calibration(Screen):
             name, px_w, px_h:  See `Screen` base class documentation.
             bcms: List of `BatteryController` instance to calibrate.
         """
-        super().__init__(name, px_w, px_h, logger=logger)
+        super().__init__(name, px_w, px_h, logger=logger, off_tm=SCRN_OFF_TM * 1000)
 
         self._bcms = bcms
 
@@ -1165,6 +1166,7 @@ RUNTIME_CONF = (
     ("SOC_REST_TIME", updateConfig, "config"),
     ("SOC_NUM_CYCLES", updateConfig, "config"),
     ("Log mem info", updateConfig, "config", "WD_LOG_MEM", "b"),
+    ("Screen Saver", updateConfig, "config", "SCRN_OFF_TM", "num"),
     ("Back", None),
 )
 
@@ -1246,7 +1248,7 @@ class BCMView(Screen):
             name, px_w, px_h:  See `Screen` base class documentation.
             bcms: List of `BatteryController` instance to control and monitor.
         """
-        super().__init__(name, px_w, px_h, logger=logger)
+        super().__init__(name, px_w, px_h, logger=logger, off_tm=SCRN_OFF_TM * 1000)
         self._bcms: list[BatteryController] = bcms
         self._active_bcm: int | None = None
         self._bc: BatteryController | None = None
@@ -1960,7 +1962,15 @@ def uiSetup(bcms: list):
         ),
         ("Memory usage", MemoryUsage("Memory Usage", OLED_W, OLED_H)),
     )
-    main_menu = Menu("MainMenu", OLED_W, OLED_H, main_menu_def, True, logger=logger)
+    main_menu = Menu(
+        "MainMenu",
+        OLED_W,
+        OLED_H,
+        main_menu_def,
+        True,
+        logger=logger,
+        off_tm=SCRN_OFF_TM * 1000,
+    )
 
     # Set up the boot screen and give it focus it
     bootscreen = Boot(f"BCM v{VERSION}", OLED_W, OLED_H, len(bcms))

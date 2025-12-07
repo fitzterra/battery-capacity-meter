@@ -377,6 +377,11 @@ SOC_NUM_CYCLES = 2
 # calibrating the shunt.
 CALIB_STEP = 0.05
 
+#### UI Config #####
+# How long to wait before switching the display off to save the screen. In
+# seconds.
+SCRN_OFF_TM = 30
+
 #### Watchdog module config ######
 # If we should log memory usage stats or not.
 WD_LOG_MEM = True
