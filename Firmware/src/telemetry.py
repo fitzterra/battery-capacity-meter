@@ -515,10 +515,6 @@ async def broadcast(bcs: list[BatteryController,]):
     Monitors each `BatteryController` in the ``bcs`` list and broadcasts MQTT
     messages on status changes and charge/discharge progress.
 
-    In addition to monitoring the BCs, this task also sets up the `MQTTClient`
-    and by extension the WiFi connection. The `MQTTClient` will do a best
-    effort attempt to re-establish network connections if it gets lost.
-
     Besides monitoring the ``BC`` statuses, it also monitors
     `telemetry_trigger` and `telemetry_logs` for messages to publish.
 
@@ -539,10 +535,6 @@ async def broadcast(bcs: list[BatteryController,]):
     # We need access to some protected members of the BatteryController class,
     # so @pylint: disable=protected-access
 
-    # Start the event tasks.
-    for task in (net_conn.connectAndMonitor, mqManager):
-        asyncio.create_task(task())
-
     # Keeps some state for each of the BCs
     state = {
         bc.name: {
@@ -556,7 +548,7 @@ async def broadcast(bcs: list[BatteryController,]):
     while True:
         # We sleep a short time here to be fairly responsive to changes to be
         # emitted
-        await asyncio.sleep_ms(100)
+        await asyncio.sleep_ms(50)
 
         # Check if we have any BCs that needs telemetry emitted
         for bc in bcs:

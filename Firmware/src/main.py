@@ -10,7 +10,8 @@ from lib.bat_controller import BatteryController
 from lib.utils import stdinKeyMonitor
 from lib.ulogging import getLogger
 from watchdog import watchdog
-from telemetry import broadcast
+import net_conn
+from telemetry import mqManager, broadcast
 
 from screens import uiSetup
 
@@ -258,6 +259,8 @@ def main():
     loop = asyncio.get_event_loop()
     loop.set_exception_handler(asyncIOExeption)
     loop.create_task(watchdog())
+    loop.create_task(net_conn.connectAndMonitor())
+    loop.create_task(mqManager())
     loop.create_task(broadcast(bat_ctls))
     loop.run_forever()
 
